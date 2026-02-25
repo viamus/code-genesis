@@ -6,6 +6,19 @@ namespace CodeGenesis.Engine.UI;
 public sealed class PipelineRenderer
 {
     private bool _spinnerActive;
+    private int _depth;
+
+    // ── Depth / scope management ──────────────────────────────────────
+
+    public void PushScope() => _depth++;
+    public void PopScope() => _depth = Math.Max(0, _depth - 1);
+
+    private string Indent => _depth > 0
+        ? new string(' ', 2) + string.Concat(Enumerable.Repeat($"[{ConsoleTheme.SubtleTag}]│[/]  ", _depth))
+        : "  ";
+
+    // ── Banner ────────────────────────────────────────────────────────
+
     public void RenderBanner()
     {
         AnsiConsole.WriteLine();
@@ -21,8 +34,13 @@ public sealed class PipelineRenderer
         AnsiConsole.WriteLine();
     }
 
+    // ── Pipeline lifecycle ────────────────────────────────────────────
+
     public void RenderPipelineStart(PipelineContext context, int totalSteps)
     {
+        // Suppress nested pipeline headers (e.g. inside foreach iterations)
+        if (_depth > 0) return;
+
         AnsiConsole.MarkupLine(
             $"  [{ConsoleTheme.MutedTag}]Task[/]    {context.TaskDescription.EscapeMarkup()}");
         AnsiConsole.MarkupLine(
@@ -37,97 +55,11 @@ public sealed class PipelineRenderer
         AnsiConsole.WriteLine();
     }
 
-    public void RenderStepStart(IPipelineStep step, int index, int total)
-    {
-        AnsiConsole.MarkupLine(
-            $"  [{ConsoleTheme.SecondaryTag} bold]{ConsoleTheme.Arrow} Step {index}/{total}[/]  " +
-            $"[bold]{step.Name.EscapeMarkup()}[/]");
-        AnsiConsole.MarkupLine(
-            $"  [{ConsoleTheme.MutedTag}]  {step.Description.EscapeMarkup()}[/]");
-    }
-
-    public async Task<StepResult> RunWithSpinner(string name, Func<Task<StepResult>> work)
-    {
-        // Spectre.Console does not allow nested interactive displays.
-        // If a spinner is already active (e.g. parent foreach/parallel step),
-        // just run the work directly.
-        if (_spinnerActive)
-            return await work();
-
-        StepResult result = null!;
-        _spinnerActive = true;
-        try
-        {
-            await AnsiConsole.Status()
-                .Spinner(Spinner.Known.Dots2)
-                .SpinnerStyle(new Style(ConsoleTheme.Primary))
-                .StartAsync($"  [{ConsoleTheme.MutedTag}]Running {name.EscapeMarkup()}…[/]", async _ =>
-                {
-                    result = await work();
-                });
-        }
-        finally
-        {
-            _spinnerActive = false;
-        }
-        return result;
-    }
-
-    public void RenderStepComplete(IPipelineStep step, StepResult result)
-    {
-        var (icon, colorTag) = result.Outcome switch
-        {
-            StepOutcome.Success => (ConsoleTheme.Check, ConsoleTheme.SuccessTag),
-            StepOutcome.Failed => (ConsoleTheme.Cross, ConsoleTheme.ErrorTag),
-            StepOutcome.Skipped => (ConsoleTheme.Dash, ConsoleTheme.MutedTag),
-            _ => ("?", ConsoleTheme.MutedTag)
-        };
-
-        var duration = result.Duration.TotalSeconds switch
-        {
-            < 1 => $"{result.Duration.TotalMilliseconds:F0}ms",
-            < 60 => $"{result.Duration.TotalSeconds:F1}s",
-            _ => $"{result.Duration.TotalMinutes:F1}m"
-        };
-
-        var metrics = $"[{ConsoleTheme.MutedTag}]{duration}[/]";
-        if (result.TokensUsed > 0)
-            metrics += $"  [{ConsoleTheme.SubtleTag}]{result.TokensUsed:N0} tokens[/]";
-        if (result.CostUsd > 0)
-            metrics += $"  [{ConsoleTheme.SubtleTag}]${result.CostUsd:F4}[/]";
-
-        AnsiConsole.MarkupLine(
-            $"  [{colorTag}]{icon}[/] {step.Name.EscapeMarkup()}  {metrics}");
-
-        if (result.Outcome == StepOutcome.Failed && result.Error is not null)
-        {
-            AnsiConsole.MarkupLine(
-                $"    [{ConsoleTheme.ErrorTag}]{result.Error.EscapeMarkup()}[/]");
-        }
-
-        AnsiConsole.WriteLine();
-    }
-
-    public void RenderStepCancelled(IPipelineStep step)
-    {
-        AnsiConsole.MarkupLine(
-            $"  [{ConsoleTheme.WarningTag}]{ConsoleTheme.Cross}[/] {step.Name.EscapeMarkup()}  " +
-            $"[{ConsoleTheme.WarningTag}]cancelled[/]");
-        AnsiConsole.WriteLine();
-    }
-
-    public void RenderStepException(IPipelineStep step, Exception ex)
-    {
-        AnsiConsole.MarkupLine(
-            $"  [{ConsoleTheme.ErrorTag}]{ConsoleTheme.Cross}[/] {step.Name.EscapeMarkup()}  " +
-            $"[{ConsoleTheme.ErrorTag}]exception[/]");
-        AnsiConsole.MarkupLine(
-            $"    [{ConsoleTheme.ErrorTag}]{ex.Message.EscapeMarkup()}[/]");
-        AnsiConsole.WriteLine();
-    }
-
     public void RenderPipelineSummary(PipelineContext context)
     {
+        // Suppress nested pipeline summaries
+        if (_depth > 0) return;
+
         AnsiConsole.Write(new Rule().RuleStyle(new Style(ConsoleTheme.Subtle)));
         AnsiConsole.WriteLine();
 
@@ -164,6 +96,9 @@ public sealed class PipelineRenderer
 
     public void RenderPipelineFailed(PipelineContext context)
     {
+        // Suppress nested pipeline failure banners
+        if (_depth > 0) return;
+
         AnsiConsole.Write(new Rule().RuleStyle(new Style(ConsoleTheme.Error)));
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine(
@@ -174,34 +109,119 @@ public sealed class PipelineRenderer
         AnsiConsole.WriteLine();
     }
 
+    // ── Step lifecycle ────────────────────────────────────────────────
+
+    public void RenderStepStart(IPipelineStep step, int index, int total)
+    {
+        AnsiConsole.MarkupLine(
+            $"{Indent}[{ConsoleTheme.SecondaryTag} bold]{ConsoleTheme.Arrow} Step {index}/{total}[/]  " +
+            $"[bold]{step.Name.EscapeMarkup()}[/]");
+        AnsiConsole.MarkupLine(
+            $"{Indent}[{ConsoleTheme.MutedTag}]  {step.Description.EscapeMarkup()}[/]");
+    }
+
+    public async Task<StepResult> RunWithSpinner(string name, Func<Task<StepResult>> work)
+    {
+        if (_spinnerActive)
+            return await work();
+
+        StepResult result = null!;
+        _spinnerActive = true;
+        try
+        {
+            await AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots2)
+                .SpinnerStyle(new Style(ConsoleTheme.Primary))
+                .StartAsync($"{Indent}[{ConsoleTheme.MutedTag}]Running {name.EscapeMarkup()}…[/]", async _ =>
+                {
+                    result = await work();
+                });
+        }
+        finally
+        {
+            _spinnerActive = false;
+        }
+        return result;
+    }
+
+    public void RenderStepComplete(IPipelineStep step, StepResult result)
+    {
+        var (icon, colorTag) = result.Outcome switch
+        {
+            StepOutcome.Success => (ConsoleTheme.Check, ConsoleTheme.SuccessTag),
+            StepOutcome.Failed => (ConsoleTheme.Cross, ConsoleTheme.ErrorTag),
+            StepOutcome.Skipped => (ConsoleTheme.Dash, ConsoleTheme.MutedTag),
+            _ => ("?", ConsoleTheme.MutedTag)
+        };
+
+        var metrics = FormatMetrics(result.Duration, result.TokensUsed, result.CostUsd);
+
+        AnsiConsole.MarkupLine(
+            $"{Indent}[{colorTag}]{icon}[/] {step.Name.EscapeMarkup()}  {metrics}");
+
+        if (result.Outcome == StepOutcome.Failed && result.Error is not null)
+        {
+            AnsiConsole.MarkupLine(
+                $"{Indent}  [{ConsoleTheme.ErrorTag}]{result.Error.EscapeMarkup()}[/]");
+        }
+
+        AnsiConsole.WriteLine();
+    }
+
+    public void RenderStepCancelled(IPipelineStep step)
+    {
+        AnsiConsole.MarkupLine(
+            $"{Indent}[{ConsoleTheme.WarningTag}]{ConsoleTheme.Cross}[/] {step.Name.EscapeMarkup()}  " +
+            $"[{ConsoleTheme.WarningTag}]cancelled[/]");
+        AnsiConsole.WriteLine();
+    }
+
+    public void RenderStepException(IPipelineStep step, Exception ex)
+    {
+        AnsiConsole.MarkupLine(
+            $"{Indent}[{ConsoleTheme.ErrorTag}]{ConsoleTheme.Cross}[/] {step.Name.EscapeMarkup()}  " +
+            $"[{ConsoleTheme.ErrorTag}]exception[/]");
+        AnsiConsole.MarkupLine(
+            $"{Indent}  [{ConsoleTheme.ErrorTag}]{ex.Message.EscapeMarkup()}[/]");
+        AnsiConsole.WriteLine();
+    }
+
+    // ── Foreach ───────────────────────────────────────────────────────
+
     public void RenderForeachStart(string itemVar, int itemCount)
     {
         AnsiConsole.MarkupLine(
-            $"  [{ConsoleTheme.SecondaryTag}]foreach[/] [{ConsoleTheme.MutedTag}]{itemVar.EscapeMarkup()}[/]  " +
+            $"{Indent}[{ConsoleTheme.SecondaryTag}]foreach[/] " +
+            $"[{ConsoleTheme.MutedTag}]{itemVar.EscapeMarkup()}[/]  " +
             $"[{ConsoleTheme.SubtleTag}]{itemCount} item(s)[/]");
         AnsiConsole.WriteLine();
     }
 
     public void RenderForeachIteration(string itemVar, string itemValue, int index, int total)
     {
-        AnsiConsole.Write(new Rule($"[{ConsoleTheme.MutedTag}]{itemVar.EscapeMarkup()} [[{index + 1}/{total}]] = {Truncate(itemValue, 40).EscapeMarkup()}[/]")
-            .RuleStyle(new Style(ConsoleTheme.Subtle))
-            .LeftJustified());
+        var isLast = index == total - 1;
+        var connector = isLast ? "\u2514" : "\u250c"; // └ or ┌
+
+        AnsiConsole.MarkupLine(
+            $"  [{ConsoleTheme.SubtleTag}]{connector}[/] " +
+            $"[{ConsoleTheme.SecondaryTag} bold][[{index + 1}/{total}]][/] " +
+            $"[bold]{Truncate(itemValue, 50).EscapeMarkup()}[/]");
     }
 
     public void RenderForeachIterationComplete(string itemValue, int index, int total, TimeSpan elapsed, int tokens, double cost)
     {
-        var duration = FormatDuration(elapsed);
-        var metrics = $"[{ConsoleTheme.SubtleTag}]{duration}[/]";
-        if (tokens > 0)
-            metrics += $"  [{ConsoleTheme.SubtleTag}]{tokens:N0} tokens[/]";
-        if (cost > 0)
-            metrics += $"  [{ConsoleTheme.SubtleTag}]${cost:F4}[/]";
+        var isLast = index == total - 1;
+        var connector = isLast ? " " : "\u2514"; // (space) or └
+        var metrics = FormatMetrics(elapsed, tokens, cost);
 
         AnsiConsole.MarkupLine(
-            $"  [{ConsoleTheme.SuccessTag}]{ConsoleTheme.Check}[/] [{ConsoleTheme.MutedTag}]iteration {index + 1}/{total} done[/]  {metrics}");
+            $"  [{ConsoleTheme.SubtleTag}]{connector}[/] " +
+            $"[{ConsoleTheme.SuccessTag}]{ConsoleTheme.Check}[/] " +
+            $"[{ConsoleTheme.MutedTag}]done[/]  {metrics}");
         AnsiConsole.WriteLine();
     }
+
+    // ── Parallel ──────────────────────────────────────────────────────
 
     public void RenderParallelStart(int branchCount, int? maxConcurrency)
     {
@@ -209,7 +229,8 @@ public sealed class PipelineRenderer
             ? $"max {maxConcurrency}"
             : "unlimited";
         AnsiConsole.MarkupLine(
-            $"  [{ConsoleTheme.SecondaryTag}]parallel[/] [{ConsoleTheme.MutedTag}]{branchCount} branch(es)[/]  " +
+            $"{Indent}[{ConsoleTheme.SecondaryTag}]parallel[/] " +
+            $"[{ConsoleTheme.MutedTag}]{branchCount} branch(es)[/]  " +
             $"[{ConsoleTheme.SubtleTag}]concurrency: {concurrencyInfo}[/]");
     }
 
@@ -219,8 +240,10 @@ public sealed class PipelineRenderer
             ? (ConsoleTheme.Check, ConsoleTheme.SuccessTag)
             : (ConsoleTheme.Cross, ConsoleTheme.ErrorTag);
         AnsiConsole.MarkupLine(
-            $"  [{colorTag}]  {icon} {branchName.EscapeMarkup()}[/]");
+            $"{Indent}  [{colorTag}]{icon} {branchName.EscapeMarkup()}[/]");
     }
+
+    // ── Utilities ─────────────────────────────────────────────────────
 
     public void RenderError(string message)
     {
@@ -230,6 +253,17 @@ public sealed class PipelineRenderer
     public void RenderInfo(string message)
     {
         AnsiConsole.MarkupLine($"  [{ConsoleTheme.MutedTag}]{message.EscapeMarkup()}[/]");
+    }
+
+    private string FormatMetrics(TimeSpan elapsed, int tokens, double cost)
+    {
+        var duration = FormatDuration(elapsed);
+        var parts = $"[{ConsoleTheme.MutedTag}]{duration}[/]";
+        if (tokens > 0)
+            parts += $"  [{ConsoleTheme.SubtleTag}]{tokens:N0} tokens[/]";
+        if (cost > 0)
+            parts += $"  [{ConsoleTheme.SubtleTag}]${cost:F4}[/]";
+        return parts;
     }
 
     private static string FormatDuration(TimeSpan ts) => ts.TotalSeconds switch
@@ -243,6 +277,6 @@ public sealed class PipelineRenderer
     private static string Truncate(string value, int maxLength)
     {
         if (string.IsNullOrEmpty(value)) return value;
-        return value.Length <= maxLength ? value : string.Concat(value.AsSpan(0, maxLength), "…");
+        return value.Length <= maxLength ? value : string.Concat(value.AsSpan(0, maxLength), "\u2026");
     }
 }

@@ -67,6 +67,7 @@ public sealed class ForeachStep(
             }
 
             renderer.RenderForeachIteration(config.ItemVar, item, i, items.Count);
+            renderer.PushScope();
 
             // Create a scoped context for this iteration
             var iterationContext = new PipelineContext
@@ -106,6 +107,8 @@ public sealed class ForeachStep(
             context.TotalInputTokens += iterationContext.TotalInputTokens;
             context.TotalOutputTokens += iterationContext.TotalOutputTokens;
             context.TotalCostUsd += iterationContext.TotalCostUsd;
+
+            renderer.PopScope();
 
             if (!success)
             {
