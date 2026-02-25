@@ -1,0 +1,61 @@
+pipeline:
+  name: "Hello World"
+  description: "A simple hello world pipeline"
+  version: "1.0"
+
+settings:
+  model: "claude-sonnet-4-6"
+  max_turns: 5
+  timeout_seconds: 300
+  working_directory: "."
+
+inputs:
+  task:
+    description: "What to build"
+    default: "Create a hello world HTML page"
+  language:
+    description: "Target language"
+    default: "html"
+
+steps:
+  - name: "Plan"
+    agent: "architect"
+    description: "Create implementation plan"
+    model: "claude-opus-4-6"
+    context: "contexts/planner"
+    output_key: "plan"
+
+  - name: "Execute"
+    agent: "engineer"
+    description: "Implement the plan"
+    system_prompt: "You are a senior engineer. Implement the plan precisely."
+    prompt: |
+      Implement this plan:
+      {{steps.plan}}
+
+      Original task: {{task}}
+    max_turns: 10
+    output_key: "result"
+    allowed_tools:
+      - "Read"
+      - "Write"
+      - "Edit"
+      - "Bash"
+
+  - name: "Validate"
+    agent: "reviewer"
+    description: "Review the implementation"
+    system_prompt: "You are a code reviewer. Validate correctness."
+    prompt: |
+      Review the implementation:
+      Plan: {{steps.plan}}
+      Result: {{steps.result}}
+      Verdict: PASS or FAIL
+    max_turns: 3
+    output_key: "validation"
+    optional: true
+
+outputs:
+  summary:
+    source: "steps.result"
+    description: "Final implementation result"

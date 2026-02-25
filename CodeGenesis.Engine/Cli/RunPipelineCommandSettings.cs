@@ -1,0 +1,23 @@
+using System.ComponentModel;
+using Spectre.Console.Cli;
+
+namespace CodeGenesis.Engine.Cli;
+
+public sealed class RunPipelineCommandSettings : CommandSettings
+{
+    [CommandArgument(0, "<file>")]
+    [Description("Path to the YAML pipeline configuration file")]
+    public string File { get; set; } = "";
+
+    [CommandOption("-i|--input <INPUT>")]
+    [Description("Input override in key=value format (repeatable)")]
+    public string[]? Input { get; set; }
+
+    [CommandOption("-d|--directory")]
+    [Description("Working directory for the pipeline (defaults to current directory)")]
+    public string? Directory { get; set; }
+
+    [CommandOption("-m|--model")]
+    [Description("Claude model override (e.g. claude-sonnet-4-6)")]
+    public string? Model { get; set; }
+}
