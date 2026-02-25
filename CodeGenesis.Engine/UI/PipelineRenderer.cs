@@ -165,7 +165,7 @@ public sealed class PipelineRenderer
     public void RenderForeachIteration(string itemVar, string itemValue, int index, int total)
     {
         AnsiConsole.MarkupLine(
-            $"  [{ConsoleTheme.SecondaryTag}]  [{ConsoleTheme.MutedTag}][{index + 1}/{total}][/] " +
+            $"  [{ConsoleTheme.SecondaryTag}]  [{ConsoleTheme.MutedTag}][[{index + 1}/{total}]][/] " +
             $"{itemVar.EscapeMarkup()} = {itemValue.EscapeMarkup()}[/]");
     }
 
