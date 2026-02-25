@@ -90,10 +90,14 @@ public sealed class PipelineRenderer
             _ => $"{result.Duration.TotalMinutes:F1}m"
         };
 
+        var metrics = $"[{ConsoleTheme.MutedTag}]{duration}[/]";
+        if (result.TokensUsed > 0)
+            metrics += $"  [{ConsoleTheme.SubtleTag}]{result.TokensUsed:N0} tokens[/]";
+        if (result.CostUsd > 0)
+            metrics += $"  [{ConsoleTheme.SubtleTag}]${result.CostUsd:F4}[/]";
+
         AnsiConsole.MarkupLine(
-            $"  [{colorTag}]{icon}[/] {step.Name.EscapeMarkup()}  " +
-            $"[{ConsoleTheme.MutedTag}]{duration}[/]  " +
-            $"[{ConsoleTheme.SubtleTag}]{result.TokensUsed:N0} tokens[/]");
+            $"  [{colorTag}]{icon}[/] {step.Name.EscapeMarkup()}  {metrics}");
 
         if (result.Outcome == StepOutcome.Failed && result.Error is not null)
         {
@@ -185,12 +189,17 @@ public sealed class PipelineRenderer
             .LeftJustified());
     }
 
-    public void RenderForeachIterationComplete(string itemValue, int index, int total, TimeSpan elapsed, int tokens)
+    public void RenderForeachIterationComplete(string itemValue, int index, int total, TimeSpan elapsed, int tokens, double cost)
     {
         var duration = FormatDuration(elapsed);
+        var metrics = $"[{ConsoleTheme.SubtleTag}]{duration}[/]";
+        if (tokens > 0)
+            metrics += $"  [{ConsoleTheme.SubtleTag}]{tokens:N0} tokens[/]";
+        if (cost > 0)
+            metrics += $"  [{ConsoleTheme.SubtleTag}]${cost:F4}[/]";
+
         AnsiConsole.MarkupLine(
-            $"  [{ConsoleTheme.SuccessTag}]{ConsoleTheme.Check}[/] [{ConsoleTheme.MutedTag}]iteration {index + 1}/{total} done[/]  " +
-            $"[{ConsoleTheme.SubtleTag}]{duration}  {tokens:N0} tokens[/]");
+            $"  [{ConsoleTheme.SuccessTag}]{ConsoleTheme.Check}[/] [{ConsoleTheme.MutedTag}]iteration {index + 1}/{total} done[/]  {metrics}");
         AnsiConsole.WriteLine();
     }
 

@@ -123,7 +123,7 @@ public sealed class ForeachStep(
             }
 
             var iterTokens = iterationContext.TotalInputTokens + iterationContext.TotalOutputTokens;
-            renderer.RenderForeachIterationComplete(item, i, items.Count, iterationSw.Elapsed, iterTokens);
+            renderer.RenderForeachIterationComplete(item, i, items.Count, iterationSw.Elapsed, iterTokens, iterationContext.TotalCostUsd);
 
             context.StepsCompleted += iterationContext.StepsCompleted;
         }
