@@ -100,6 +100,7 @@ public sealed class ClaudeCliRunner(
         if (request.SystemPrompt is not null)
             sb.Append($" --system-prompt \"{Escape(request.SystemPrompt)}\"");
 
+        // MaxTurns: null = use default, 0 = unlimited (omit flag), >0 = explicit limit
         if (request.MaxTurns is > 0)
             sb.Append($" --max-turns {request.MaxTurns}");
 

@@ -37,7 +37,7 @@ public sealed class ExecuteStep(
                 Implement the plan now. Be thorough and precise.
                 """,
             SystemPrompt = "You are a senior software engineer. Implement the given plan precisely. Use tools to read/write files. Do not skip steps.",
-            MaxTurns = options.Value.MaxTurnsDefault,
+            MaxTurns = options.Value.MaxTurnsDefault == 0 ? null : options.Value.MaxTurnsDefault,
             WorkingDirectory = context.WorkingDirectory
         }, ct);
 

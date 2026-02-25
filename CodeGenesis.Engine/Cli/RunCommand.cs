@@ -20,7 +20,8 @@ public sealed class RunCommand(
         // Apply settings overrides
         if (settings.Model is not null)
             claudeOptions.Value.DefaultModel = settings.Model;
-        if (settings.MaxTurns > 0)
+        // MaxTurns: 0 = unlimited, >0 = explicit limit, default (5) set in settings
+        if (settings.MaxTurns != claudeOptions.Value.MaxTurnsDefault)
             claudeOptions.Value.MaxTurnsDefault = settings.MaxTurns;
 
         var context = new PipelineContext

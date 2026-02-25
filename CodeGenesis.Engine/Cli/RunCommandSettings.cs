@@ -18,7 +18,7 @@ public sealed class RunCommandSettings : CommandSettings
     public string? Model { get; set; }
 
     [CommandOption("--max-turns")]
-    [Description("Maximum agentic turns per step")]
+    [Description("Maximum agentic turns per step (0 = unlimited)")]
     [DefaultValue(5)]
     public int MaxTurns { get; set; } = 5;
 

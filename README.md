@@ -73,7 +73,7 @@ Runs a built-in **Plan > Execute > Validate** pipeline for a given task descript
 |---------------------|------------------------------------------|
 | `-d, --directory`   | Working directory (default: current)     |
 | `-m, --model`       | Claude model (e.g. `claude-sonnet-4-6`)  |
-| `--max-turns`       | Max agentic turns per step (default: 5)  |
+| `--max-turns`       | Max agentic turns per step (default: 5, 0 = unlimited) |
 | `--skip-validate`   | Skip the validation step                 |
 
 ### `run-pipeline <file>`
@@ -165,6 +165,7 @@ A **turn** is one complete round-trip between CodeGenesis and Claude: the engine
 
 | Value | Behavior |
 |-------|----------|
+| `0`   | **Unlimited**: Claude runs with no turn limit — it will keep working until the task is complete or the timeout is reached. Use this for complex, open-ended tasks where you want full autonomy. |
 | `1`   | Single-shot: Claude responds once with no tool use. Good for planning or review steps that only need to produce text. |
 | `3-5` | Light agentic work: enough for reading a few files and producing a response. This is the default. |
 | `10+` | Deep agentic work: Claude can explore the codebase, create/edit multiple files, run commands, and iterate. Use for execution-heavy steps. |
@@ -174,6 +175,20 @@ You can set it at three levels (most specific wins):
 1. **Per step** — `max_turns: 10` in a YAML step or agent frontmatter
 2. **Per pipeline** — `settings.max_turns: 5` in the YAML global settings
 3. **Global default** — `MaxTurnsDefault` in `appsettings.json` or via `--max-turns` CLI flag (default: `5`)
+
+**Unlimited turns from the CLI:**
+
+```bash
+# Ad-hoc command with unlimited turns
+dotnet run --project CodeGenesis.Engine -- run "Build a full REST API" --max-turns 0
+
+# YAML pipeline with unlimited turns on a specific step
+steps:
+  - name: "Execute"
+    max_turns: 0    # let Claude work until done
+```
+
+> **Warning:** Unlimited turns can consume significant API credits and run for a long time. Make sure `timeout_seconds` is configured appropriately to act as a safety net.
 
 ## Context Bundles
 
@@ -256,7 +271,7 @@ Place an `appsettings.json` in the Engine project for persistent configuration:
 | `CliPath`         | `"claude"`           | Path to the Claude Code CLI binary   |
 | `DefaultModel`    | `null`               | Model used when none is specified    |
 | `TimeoutSeconds`  | `300`                | Max seconds before killing a process |
-| `MaxTurnsDefault` | `5`                  | Default agentic turns per step       |
+| `MaxTurnsDefault` | `5`                  | Default agentic turns per step (0 = unlimited) |
 
 ## Project Structure
 
@@ -324,6 +339,10 @@ Log level is `Debug` by default. Logs include timestamps, Claude process invocat
 - [Spectre.Console Documentation](https://spectreconsole.net/)
 - [YamlDotNet](https://github.com/aaubry/YamlDotNet)
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute.
+
 ## License
 
-MIT
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
