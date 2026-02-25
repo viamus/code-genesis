@@ -46,6 +46,7 @@ public sealed class ForeachStep(
         }
 
         var iterationResults = new List<Dictionary<string, string>>();
+        var skippedCount = 0;
         var totalTokens = 0;
         var totalCost = 0.0;
 
@@ -54,6 +55,16 @@ public sealed class ForeachStep(
             ct.ThrowIfCancellationRequested();
 
             var item = items[i];
+
+            // Skip null or empty items and mark as completed
+            if (string.IsNullOrWhiteSpace(item))
+            {
+                renderer.RenderForeachIteration(config.ItemVar, "(empty)", i, items.Count);
+                iterationResults.Add(new Dictionary<string, string>());
+                skippedCount++;
+                continue;
+            }
+
             renderer.RenderForeachIteration(config.ItemVar, item, i, items.Count);
 
             // Create a scoped context for this iteration
@@ -121,7 +132,9 @@ public sealed class ForeachStep(
         return new StepResult
         {
             Outcome = StepOutcome.Success,
-            Output = $"Completed {items.Count} iteration(s)",
+            Output = skippedCount > 0
+                ? $"Completed {items.Count} iteration(s), {skippedCount} skipped (empty)"
+                : $"Completed {items.Count} iteration(s)",
             Duration = sw.Elapsed,
             TokensUsed = totalTokens,
             CostUsd = totalCost
