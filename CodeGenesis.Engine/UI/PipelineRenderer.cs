@@ -5,6 +5,7 @@ namespace CodeGenesis.Engine.UI;
 
 public sealed class PipelineRenderer
 {
+    private bool _spinnerActive;
     public void RenderBanner()
     {
         AnsiConsole.WriteLine();
@@ -47,14 +48,28 @@ public sealed class PipelineRenderer
 
     public async Task<StepResult> RunWithSpinner(string name, Func<Task<StepResult>> work)
     {
+        // Spectre.Console does not allow nested interactive displays.
+        // If a spinner is already active (e.g. parent foreach/parallel step),
+        // just run the work directly.
+        if (_spinnerActive)
+            return await work();
+
         StepResult result = null!;
-        await AnsiConsole.Status()
-            .Spinner(Spinner.Known.Dots2)
-            .SpinnerStyle(new Style(ConsoleTheme.Primary))
-            .StartAsync($"  [{ConsoleTheme.MutedTag}]Running {name.EscapeMarkup()}…[/]", async _ =>
-            {
-                result = await work();
-            });
+        _spinnerActive = true;
+        try
+        {
+            await AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots2)
+                .SpinnerStyle(new Style(ConsoleTheme.Primary))
+                .StartAsync($"  [{ConsoleTheme.MutedTag}]Running {name.EscapeMarkup()}…[/]", async _ =>
+                {
+                    result = await work();
+                });
+        }
+        finally
+        {
+            _spinnerActive = false;
+        }
         return result;
     }
 
