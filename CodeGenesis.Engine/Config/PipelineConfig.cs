@@ -148,10 +148,14 @@ public sealed class StepEntry
     [YamlMember(Alias = "parallel")]
     public ParallelConfig? Parallel { get; set; }
 
+    [YamlMember(Alias = "guard")]
+    public GuardConfig? Guard { get; set; }
+
     // --- Discriminators ---
-    public bool IsSimpleStep => Foreach is null && Parallel is null && Name is not null;
+    public bool IsSimpleStep => Foreach is null && Parallel is null && Guard is null && Name is not null;
     public bool IsForeach => Foreach is not null;
     public bool IsParallel => Parallel is not null;
+    public bool IsGuard => Guard is not null;
 
     /// <summary>Converts a simple StepEntry to the legacy StepConfig model.</summary>
     public StepConfig ToStepConfig() => new()
@@ -195,6 +199,15 @@ public sealed class ParallelConfig
 
     [YamlMember(Alias = "branches")]
     public List<ParallelBranch> Branches { get; set; } = [];
+}
+
+public sealed class GuardConfig
+{
+    [YamlMember(Alias = "collection")]
+    public string Collection { get; set; } = "";
+
+    [YamlMember(Alias = "error_message")]
+    public string? ErrorMessage { get; set; }
 }
 
 public sealed class ParallelBranch
