@@ -55,6 +55,7 @@ public sealed class ForeachStep(
             ct.ThrowIfCancellationRequested();
 
             var item = items[i];
+            var iterationSw = Stopwatch.StartNew();
 
             // Skip null or empty items and mark as completed
             if (string.IsNullOrWhiteSpace(item))
@@ -120,6 +121,9 @@ public sealed class ForeachStep(
                     CostUsd = totalCost
                 };
             }
+
+            var iterTokens = iterationContext.TotalInputTokens + iterationContext.TotalOutputTokens;
+            renderer.RenderForeachIterationComplete(item, i, items.Count, iterationSw.Elapsed, iterTokens);
 
             context.StepsCompleted += iterationContext.StepsCompleted;
         }

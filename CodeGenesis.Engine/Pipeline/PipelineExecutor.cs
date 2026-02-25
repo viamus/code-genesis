@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using CodeGenesis.Engine.Steps;
 using CodeGenesis.Engine.UI;
 using Microsoft.Extensions.Logging;
 
@@ -26,9 +27,14 @@ public sealed class PipelineExecutor(
             StepResult result;
             try
             {
-                result = await renderer.RunWithSpinner(
-                    step.Name,
-                    () => step.ExecuteAsync(context, ct));
+                // Composite steps (foreach, parallel) render their own progress;
+                // wrapping them in a spinner would swallow sub-step output.
+                if (step is ForeachStep or ParallelStep)
+                    result = await step.ExecuteAsync(context, ct);
+                else
+                    result = await renderer.RunWithSpinner(
+                        step.Name,
+                        () => step.ExecuteAsync(context, ct));
             }
             catch (OperationCanceledException)
             {

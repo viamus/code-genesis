@@ -175,13 +175,23 @@ public sealed class PipelineRenderer
         AnsiConsole.MarkupLine(
             $"  [{ConsoleTheme.SecondaryTag}]foreach[/] [{ConsoleTheme.MutedTag}]{itemVar.EscapeMarkup()}[/]  " +
             $"[{ConsoleTheme.SubtleTag}]{itemCount} item(s)[/]");
+        AnsiConsole.WriteLine();
     }
 
     public void RenderForeachIteration(string itemVar, string itemValue, int index, int total)
     {
+        AnsiConsole.Write(new Rule($"[{ConsoleTheme.MutedTag}]{itemVar.EscapeMarkup()} [[{index + 1}/{total}]] = {Truncate(itemValue, 40).EscapeMarkup()}[/]")
+            .RuleStyle(new Style(ConsoleTheme.Subtle))
+            .LeftJustified());
+    }
+
+    public void RenderForeachIterationComplete(string itemValue, int index, int total, TimeSpan elapsed, int tokens)
+    {
+        var duration = FormatDuration(elapsed);
         AnsiConsole.MarkupLine(
-            $"  [{ConsoleTheme.SecondaryTag}]  [{ConsoleTheme.MutedTag}][[{index + 1}/{total}]][/] " +
-            $"{itemVar.EscapeMarkup()} = {itemValue.EscapeMarkup()}[/]");
+            $"  [{ConsoleTheme.SuccessTag}]{ConsoleTheme.Check}[/] [{ConsoleTheme.MutedTag}]iteration {index + 1}/{total} done[/]  " +
+            $"[{ConsoleTheme.SubtleTag}]{duration}  {tokens:N0} tokens[/]");
+        AnsiConsole.WriteLine();
     }
 
     public void RenderParallelStart(int branchCount, int? maxConcurrency)
@@ -220,4 +230,10 @@ public sealed class PipelineRenderer
         < 3600 => $"{ts.Minutes}m {ts.Seconds}s",
         _ => $"{ts.Hours}h {ts.Minutes}m"
     };
+
+    private static string Truncate(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        return value.Length <= maxLength ? value : string.Concat(value.AsSpan(0, maxLength), "…");
+    }
 }
