@@ -1,0 +1,69 @@
+pipeline:
+  name: "Foreach & Parallel Demo"
+  description: "Demonstrates foreach iteration and parallel branch execution"
+  version: "1.0"
+
+settings:
+  model: "claude-sonnet-4-6"
+  max_turns: 3
+
+inputs:
+  modules:
+    description: "Comma-separated list of modules to analyze"
+    default: "auth,api,database"
+
+steps:
+  # Step 1: Simple step — generate a module list (or use input directly)
+  - name: "Prepare modules"
+    prompt: |
+      Return ONLY a JSON array of module names from this list: {{modules}}
+      Example: ["auth","api","database"]
+      Return ONLY the JSON array, nothing else.
+    max_turns: 1
+    output_key: "module_list"
+
+  # Step 2: Foreach — iterate over each module
+  - foreach:
+      collection: "{{steps.module_list}}"
+      item_var: "module"
+      output_key: "module_results"
+      steps:
+        # Inside each iteration, run parallel reviews
+        - parallel:
+            max_concurrency: 3
+            fail_fast: false
+            branches:
+              - name: "Lint {{module}}"
+                output_key: "lint"
+                steps:
+                  - name: "Lint {{module}}"
+                    prompt: |
+                      You are a linting assistant. Analyze the module "{{module}}" for code style issues.
+                      Return a brief lint report (2-3 sentences).
+                    max_turns: 1
+                    output_key: "lint"
+
+              - name: "Test {{module}}"
+                output_key: "test"
+                steps:
+                  - name: "Test {{module}}"
+                    prompt: |
+                      You are a testing assistant. Suggest test cases for the module "{{module}}".
+                      Return a brief list of 3 test cases.
+                    max_turns: 1
+                    output_key: "test"
+
+  # Step 3: Summarize all results
+  - name: "Summarize"
+    prompt: |
+      Summarize the following module analysis results:
+      {{steps.module_results}}
+
+      Provide a brief overall summary.
+    max_turns: 1
+    output_key: "summary"
+
+outputs:
+  summary:
+    source: "steps.summary"
+    description: "Overall analysis summary"

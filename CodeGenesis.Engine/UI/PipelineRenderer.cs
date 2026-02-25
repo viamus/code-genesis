@@ -155,6 +155,39 @@ public sealed class PipelineRenderer
         AnsiConsole.WriteLine();
     }
 
+    public void RenderForeachStart(string itemVar, int itemCount)
+    {
+        AnsiConsole.MarkupLine(
+            $"  [{ConsoleTheme.SecondaryTag}]foreach[/] [{ConsoleTheme.MutedTag}]{itemVar.EscapeMarkup()}[/]  " +
+            $"[{ConsoleTheme.SubtleTag}]{itemCount} item(s)[/]");
+    }
+
+    public void RenderForeachIteration(string itemVar, string itemValue, int index, int total)
+    {
+        AnsiConsole.MarkupLine(
+            $"  [{ConsoleTheme.SecondaryTag}]  [{ConsoleTheme.MutedTag}][{index + 1}/{total}][/] " +
+            $"{itemVar.EscapeMarkup()} = {itemValue.EscapeMarkup()}[/]");
+    }
+
+    public void RenderParallelStart(int branchCount, int? maxConcurrency)
+    {
+        var concurrencyInfo = maxConcurrency.HasValue
+            ? $"max {maxConcurrency}"
+            : "unlimited";
+        AnsiConsole.MarkupLine(
+            $"  [{ConsoleTheme.SecondaryTag}]parallel[/] [{ConsoleTheme.MutedTag}]{branchCount} branch(es)[/]  " +
+            $"[{ConsoleTheme.SubtleTag}]concurrency: {concurrencyInfo}[/]");
+    }
+
+    public void RenderParallelBranchComplete(string branchName, bool success)
+    {
+        var (icon, colorTag) = success
+            ? (ConsoleTheme.Check, ConsoleTheme.SuccessTag)
+            : (ConsoleTheme.Cross, ConsoleTheme.ErrorTag);
+        AnsiConsole.MarkupLine(
+            $"  [{colorTag}]  {icon} {branchName.EscapeMarkup()}[/]");
+    }
+
     public void RenderError(string message)
     {
         AnsiConsole.MarkupLine($"  [{ConsoleTheme.ErrorTag}]{ConsoleTheme.Cross} {message.EscapeMarkup()}[/]");

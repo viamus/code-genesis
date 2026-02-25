@@ -39,6 +39,7 @@ try
     // Core services
     services.AddSingleton<IClaudeRunner, ClaudeCliRunner>();
     services.AddSingleton<PipelineExecutor>();
+    services.AddSingleton<IStepExecutor>(sp => sp.GetRequiredService<PipelineExecutor>());
     services.AddSingleton<PipelineRenderer>();
 
     // CLI commands

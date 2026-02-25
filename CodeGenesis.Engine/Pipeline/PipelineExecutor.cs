@@ -6,7 +6,7 @@ namespace CodeGenesis.Engine.Pipeline;
 
 public sealed class PipelineExecutor(
     PipelineRenderer renderer,
-    ILogger<PipelineExecutor> logger)
+    ILogger<PipelineExecutor> logger) : IStepExecutor
 {
     public async Task<bool> RunAsync(
         IReadOnlyList<IPipelineStep> steps,

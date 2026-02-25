@@ -71,37 +71,17 @@ public sealed class RunPipelineCommand(
             WorkingDirectory = workingDir
         };
 
-        // Build dynamic steps
-        var steps = new List<IPipelineStep>();
-        foreach (var stepConfig in config.Steps)
+        // Build step tree using StepBuilder
+        List<IPipelineStep> steps;
+        try
         {
-            // Load context bundle if specified
-            AgentDefinition? bundle = null;
-            if (!string.IsNullOrWhiteSpace(stepConfig.Context))
-            {
-                try
-                {
-                    bundle = ContextBundleLoader.LoadBundle(stepConfig.Context, pipelineDir);
-                    ApplyBundle(stepConfig, bundle);
-                }
-                catch (Exception ex)
-                {
-                    renderer.RenderError($"Failed to load context bundle for step '{stepConfig.Name}': {ex.Message}");
-                    return 1;
-                }
-            }
-
-            // Resolve model: step.Model > bundle.Model > globalModel
-            var stepModel = stepConfig.Model ?? bundle?.Model ?? globalModel;
-
-            // Resolve template placeholders in the prompt
-            var resolvedPrompt = PipelineConfigLoader.ResolveTemplate(stepConfig.Prompt, variables);
-            var resolvedSystemPrompt = stepConfig.SystemPrompt is not null
-                ? PipelineConfigLoader.ResolveTemplate(stepConfig.SystemPrompt, variables)
-                : null;
-
-            var step = new DynamicStep(claude, stepConfig, resolvedPrompt, resolvedSystemPrompt, stepModel);
-            steps.Add(step);
+            var builder = new StepBuilder(claude, executor, renderer, pipelineDir, globalModel, variables);
+            steps = builder.BuildAll(config.Steps);
+        }
+        catch (Exception ex)
+        {
+            renderer.RenderError($"Failed to build pipeline steps: {ex.Message}");
+            return 1;
         }
 
         using var cts = new CancellationTokenSource();
@@ -136,21 +116,5 @@ public sealed class RunPipelineCommand(
         });
 
         return success ? 0 : 1;
-    }
-
-    private static void ApplyBundle(StepConfig stepConfig, AgentDefinition bundle)
-    {
-        // Bundle overrides inline values when defined
-        if (bundle.SystemPrompt is not null)
-            stepConfig.SystemPrompt = bundle.SystemPrompt;
-
-        if (bundle.Prompt is not null)
-            stepConfig.Prompt = bundle.Prompt;
-
-        if (bundle.MaxTurns is not null)
-            stepConfig.MaxTurns = bundle.MaxTurns;
-
-        if (bundle.AllowedTools is not null)
-            stepConfig.AllowedTools = bundle.AllowedTools;
     }
 }

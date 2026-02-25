@@ -43,15 +43,48 @@ public static partial class PipelineConfigLoader
         if (config.Steps.Count == 0)
             throw new InvalidOperationException("Pipeline must have at least one step.");
 
-        for (var i = 0; i < config.Steps.Count; i++)
+        ValidateStepEntries(config.Steps, "root");
+    }
+
+    private static void ValidateStepEntries(List<StepEntry> entries, string path)
+    {
+        for (var i = 0; i < entries.Count; i++)
         {
-            var step = config.Steps[i];
+            var entry = entries[i];
+            var entryPath = $"{path}[{i}]";
 
-            if (string.IsNullOrWhiteSpace(step.Name))
-                throw new InvalidOperationException($"Step {i + 1} is missing a 'name'.");
-
-            if (string.IsNullOrWhiteSpace(step.Prompt) && string.IsNullOrWhiteSpace(step.Context))
-                throw new InvalidOperationException($"Step '{step.Name}' must have either a 'prompt' or a 'context'.");
+            if (entry.IsForeach)
+            {
+                var fc = entry.Foreach!;
+                if (string.IsNullOrWhiteSpace(fc.Collection))
+                    throw new InvalidOperationException($"Foreach at {entryPath} is missing 'collection'.");
+                if (fc.Steps.Count == 0)
+                    throw new InvalidOperationException($"Foreach at {entryPath} must have at least one sub-step.");
+                ValidateStepEntries(fc.Steps, $"{entryPath}.foreach");
+            }
+            else if (entry.IsParallel)
+            {
+                var pc = entry.Parallel!;
+                if (pc.Branches.Count == 0)
+                    throw new InvalidOperationException($"Parallel at {entryPath} must have at least one branch.");
+                for (var b = 0; b < pc.Branches.Count; b++)
+                {
+                    var branch = pc.Branches[b];
+                    if (string.IsNullOrWhiteSpace(branch.Name))
+                        throw new InvalidOperationException($"Parallel branch {b + 1} at {entryPath} is missing a 'name'.");
+                    if (branch.Steps.Count == 0)
+                        throw new InvalidOperationException($"Parallel branch '{branch.Name}' at {entryPath} must have at least one step.");
+                    ValidateStepEntries(branch.Steps, $"{entryPath}.parallel.{branch.Name}");
+                }
+            }
+            else
+            {
+                // Simple step
+                if (string.IsNullOrWhiteSpace(entry.Name))
+                    throw new InvalidOperationException($"Step at {entryPath} is missing a 'name'.");
+                if (string.IsNullOrWhiteSpace(entry.Prompt) && string.IsNullOrWhiteSpace(entry.Context))
+                    throw new InvalidOperationException($"Step '{entry.Name}' at {entryPath} must have either a 'prompt' or a 'context'.");
+            }
         }
     }
 
