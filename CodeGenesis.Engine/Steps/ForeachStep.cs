@@ -34,6 +34,17 @@ public sealed class ForeachStep(
 
         renderer.RenderForeachStart(config.ItemVar, items.Count);
 
+        if (items.Count == 0)
+        {
+            sw.Stop();
+            return new StepResult
+            {
+                Outcome = StepOutcome.Failed,
+                Error = "Foreach collection is empty — stopping pipeline",
+                Duration = sw.Elapsed
+            };
+        }
+
         var iterationResults = new List<Dictionary<string, string>>();
         var totalTokens = 0;
         var totalCost = 0.0;
