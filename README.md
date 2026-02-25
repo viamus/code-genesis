@@ -157,6 +157,91 @@ outputs:
 
 Use `{{variable}}` to reference inputs and `{{steps.<output_key>}}` to reference outputs from previous steps. Variables are resolved just before each step runs, so later steps always see the latest outputs.
 
+### Foreach (Iteration)
+
+Loop over a collection and run sub-steps for each item:
+
+```yaml
+steps:
+  - name: "List modules"
+    prompt: "Return a JSON array of module names"
+    output_key: "modules"
+
+  - foreach:
+      collection: "{{steps.modules}}"    # JSON array or comma-separated string
+      item_var: "module"                  # variable name for current item (default: "item")
+      output_key: "module_results"        # aggregated results stored as JSON array
+      steps:
+        - name: "Analyze {{module}}"
+          prompt: "Analyze module: {{module}}"
+          output_key: "analysis"
+```
+
+**Collection formats** — The `collection` field accepts a JSON array (`["a","b","c"]`), a comma-separated string (`a,b,c`), or a newline-separated string.
+
+**Loop variables** — Inside foreach sub-steps you can use:
+- `{{<item_var>}}` (e.g. `{{module}}`) — the current item value
+- `{{loop.item}}` — alias for the current item
+- `{{loop.index}}` — zero-based index of the current iteration
+
+**Scoping** — Each iteration gets its own context. Sub-step outputs from one iteration don't leak into the next. When `output_key` is set, all iteration results are aggregated into a JSON array.
+
+### Parallel (Concurrent Branches)
+
+Run multiple independent branches concurrently:
+
+```yaml
+steps:
+  - parallel:
+      max_concurrency: 5               # optional, default = unlimited
+      fail_fast: true                   # optional, cancel siblings on first failure
+      branches:
+        - name: "Security Review"
+          output_key: "security"
+          steps:
+            - name: "Check vulnerabilities"
+              prompt: "Review for security issues"
+              output_key: "security"
+
+        - name: "Performance Review"
+          output_key: "performance"
+          steps:
+            - name: "Check performance"
+              prompt: "Review for performance"
+              output_key: "performance"
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `max_concurrency` | unlimited | Maximum branches running at the same time |
+| `fail_fast` | `false` | If `true`, cancel remaining branches when one fails |
+
+Each branch runs in an isolated context. After all branches complete, their outputs are merged back into the parent context.
+
+### Composing Foreach + Parallel
+
+Foreach and parallel can be nested. For example, "for each module, run lint and test in parallel":
+
+```yaml
+steps:
+  - foreach:
+      collection: "{{steps.modules}}"
+      item_var: "module"
+      steps:
+        - parallel:
+            branches:
+              - name: "Lint"
+                steps:
+                  - name: "Lint {{module}}"
+                    prompt: "Lint module {{module}}"
+              - name: "Test"
+                steps:
+                  - name: "Test {{module}}"
+                    prompt: "Test module {{module}}"
+```
+
+See [`examples/foreach-parallel.yml`](examples/foreach-parallel.yml) for a complete working example.
+
 ### Understanding `max_turns`
 
 A **turn** is one complete round-trip between CodeGenesis and Claude: the engine sends a prompt, Claude reasons about it, optionally calls tools (Read, Write, Edit, Bash, etc.), and returns a response. Complex tasks often require multiple turns — for example, Claude might read a file in turn 1, edit it in turn 2, and run tests in turn 3.
@@ -280,6 +365,7 @@ code-genesis-github/
   Solution.slnx
   examples/
     hello-world.yml                  # Sample pipeline
+    foreach-parallel.yml             # Foreach + parallel demo
     contexts/
       planner/                       # Sample context bundle
         CONTEXT.md
@@ -303,15 +389,20 @@ code-genesis-github/
       AgentDefinition.cs             # Agent config model
       MarkdownFrontmatterParser.cs   # Parses YAML frontmatter from .md files
     Pipeline/
-      PipelineExecutor.cs            # Runs steps sequentially
+      PipelineExecutor.cs            # Runs steps sequentially (implements IStepExecutor)
       PipelineContext.cs             # Shared state between steps
       IPipelineStep.cs               # Step interface
+      IStepExecutor.cs               # Interface for recursive sub-execution
+      CollectionParser.cs            # Parses JSON/CSV/newline collections
       StepResult.cs                  # Step output model
     Steps/
       PlanStep.cs                    # Built-in planning step
       ExecuteStep.cs                 # Built-in execution step
       ValidateStep.cs                # Built-in validation step
       DynamicStep.cs                 # YAML-driven dynamic step
+      ForeachStep.cs                 # Iterates over a collection
+      ParallelStep.cs                # Runs branches concurrently
+      StepBuilder.cs                 # Builds step trees from YAML model
     UI/
       PipelineRenderer.cs            # Spectre.Console output
       ConsoleTheme.cs                # Theme constants
