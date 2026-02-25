@@ -26,9 +26,22 @@ public sealed class GuardStep(
             allVars[$"steps.{key}"] = value;
 
         var collectionRaw = resolveTemplate(config.Collection, allVars);
-        var items = CollectionParser.Parse(collectionRaw);
 
         var errorMessage = config.ErrorMessage ?? "Guard failed: collection is empty or contains invalid entries";
+
+        // If the template didn't resolve (placeholder still present), treat as empty
+        if (string.IsNullOrWhiteSpace(collectionRaw) || collectionRaw.Contains("{{"))
+        {
+            sw.Stop();
+            return Task.FromResult(new StepResult
+            {
+                Outcome = StepOutcome.Failed,
+                Error = errorMessage,
+                Duration = sw.Elapsed
+            });
+        }
+
+        var items = CollectionParser.Parse(collectionRaw);
 
         if (items.Count == 0)
         {
