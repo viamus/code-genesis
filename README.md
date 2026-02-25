@@ -157,6 +157,24 @@ outputs:
 
 Use `{{variable}}` to reference inputs and `{{steps.<output_key>}}` to reference outputs from previous steps. Variables are resolved just before each step runs, so later steps always see the latest outputs.
 
+### Understanding `max_turns`
+
+A **turn** is one complete round-trip between CodeGenesis and Claude: the engine sends a prompt, Claude reasons about it, optionally calls tools (Read, Write, Edit, Bash, etc.), and returns a response. Complex tasks often require multiple turns — for example, Claude might read a file in turn 1, edit it in turn 2, and run tests in turn 3.
+
+`max_turns` limits how many of these round-trips a single step is allowed to perform. This controls both cost and execution time:
+
+| Value | Behavior |
+|-------|----------|
+| `1`   | Single-shot: Claude responds once with no tool use. Good for planning or review steps that only need to produce text. |
+| `3-5` | Light agentic work: enough for reading a few files and producing a response. This is the default. |
+| `10+` | Deep agentic work: Claude can explore the codebase, create/edit multiple files, run commands, and iterate. Use for execution-heavy steps. |
+
+You can set it at three levels (most specific wins):
+
+1. **Per step** — `max_turns: 10` in a YAML step or agent frontmatter
+2. **Per pipeline** — `settings.max_turns: 5` in the YAML global settings
+3. **Global default** — `MaxTurnsDefault` in `appsettings.json` or via `--max-turns` CLI flag (default: `5`)
+
 ## Context Bundles
 
 Context bundles let you package agent instructions as reusable Markdown directories instead of inlining everything in YAML. A step references a bundle via the `context` field:
