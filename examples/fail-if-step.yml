@@ -1,0 +1,69 @@
+pipeline:
+  name: "Fail-If Step Demo"
+  description: "Demonstrates using fail_if to let the LLM stop the pipeline when a condition is met"
+  version: "1.0"
+
+settings:
+  model: "claude-sonnet-4-6"
+  max_turns: 3
+
+inputs:
+  modules:
+    description: "Comma-separated list of modules to process"
+    default: "auth,api,database"
+
+steps:
+  # Step 1: Ask the LLM to produce a module list
+  - name: "List modules"
+    prompt: |
+      Return ONLY a JSON array of module names from this list: {{modules}}
+      Example: ["auth","api","database"]
+      Return ONLY the JSON array, nothing else.
+    max_turns: 1
+    output_key: "module_list"
+
+  # Step 2: Validate the module list using the LLM with fail_if.
+  # If the LLM detects a problem, it outputs "INVALID" and the pipeline stops.
+  - name: "Validate modules"
+    prompt: |
+      Analyze this JSON array of module names: {{steps.module_list}}
+
+      Rules:
+      - The array must not be empty
+      - Each module name must be a non-empty string
+      - Module names must be lowercase alphanumeric
+
+      If ALL rules pass, respond with ONLY: VALID
+      If ANY rule fails, respond with ONLY: INVALID - <reason>
+    max_turns: 1
+    output_key: "validation"
+    fail_if: "INVALID"
+    fail_message: "Module validation failed — pipeline stopped by LLM"
+
+  # Step 3: Foreach — only runs if validation passed
+  - foreach:
+      collection: "{{steps.module_list}}"
+      item_var: "module"
+      output_key: "module_results"
+      steps:
+        - name: "Process {{module}}"
+          prompt: |
+            Describe the responsibilities of a typical "{{module}}" module
+            in a web application. Keep it to 2-3 sentences.
+          max_turns: 1
+          output_key: "description"
+
+  # Step 4: Summarize
+  - name: "Summarize"
+    prompt: |
+      Summarize the following module descriptions:
+      {{steps.module_results}}
+
+      Provide a brief overall summary.
+    max_turns: 1
+    output_key: "summary"
+
+outputs:
+  summary:
+    source: "steps.summary"
+    description: "Overall module summary"

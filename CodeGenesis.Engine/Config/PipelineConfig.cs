@@ -90,6 +90,12 @@ public sealed class StepConfig
 
     [YamlMember(Alias = "optional")]
     public bool Optional { get; set; }
+
+    [YamlMember(Alias = "fail_if")]
+    public string? FailIf { get; set; }
+
+    [YamlMember(Alias = "fail_message")]
+    public string? FailMessage { get; set; }
 }
 
 public sealed class PipelineOutput
@@ -141,6 +147,12 @@ public sealed class StepEntry
     [YamlMember(Alias = "optional")]
     public bool Optional { get; set; }
 
+    [YamlMember(Alias = "fail_if")]
+    public string? FailIf { get; set; }
+
+    [YamlMember(Alias = "fail_message")]
+    public string? FailMessage { get; set; }
+
     // --- Composite step fields ---
     [YamlMember(Alias = "foreach")]
     public ForeachConfig? Foreach { get; set; }
@@ -170,7 +182,9 @@ public sealed class StepEntry
         MaxTurns = MaxTurns,
         OutputKey = OutputKey,
         AllowedTools = AllowedTools,
-        Optional = Optional
+        Optional = Optional,
+        FailIf = FailIf,
+        FailMessage = FailMessage
     };
 }
 

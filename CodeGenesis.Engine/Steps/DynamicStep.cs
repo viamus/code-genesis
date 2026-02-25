@@ -64,6 +64,22 @@ public sealed class DynamicStep(
         context.TotalOutputTokens += response.OutputTokens;
         context.TotalCostUsd += response.CostUsd ?? 0;
 
+        // Check fail_if condition: if the LLM output contains the trigger, stop the pipeline
+        if (!string.IsNullOrWhiteSpace(stepConfig.FailIf)
+            && (response.Result ?? "").Contains(stepConfig.FailIf, StringComparison.OrdinalIgnoreCase))
+        {
+            var failMessage = stepConfig.FailMessage
+                ?? $"Step '{stepConfig.Name}' output matched fail condition: {stepConfig.FailIf}";
+            return new StepResult
+            {
+                Outcome = StepOutcome.Failed,
+                Error = failMessage,
+                Duration = response.Duration,
+                TokensUsed = response.InputTokens + response.OutputTokens,
+                CostUsd = response.CostUsd ?? 0
+            };
+        }
+
         return new StepResult
         {
             Outcome = StepOutcome.Success,
