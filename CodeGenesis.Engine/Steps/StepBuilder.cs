@@ -23,9 +23,6 @@ public sealed class StepBuilder(
 
     public IPipelineStep Build(StepEntry entry)
     {
-        if (entry.IsGuard)
-            return BuildGuard(entry.Guard!);
-
         if (entry.IsForeach)
             return BuildForeach(entry.Foreach!);
 
@@ -63,11 +60,6 @@ public sealed class StepBuilder(
         return new ForeachStep(
             config, subSteps, executor, renderer,
             PipelineConfigLoader.ResolveTemplate, variables);
-    }
-
-    private GuardStep BuildGuard(GuardConfig config)
-    {
-        return new GuardStep(config, PipelineConfigLoader.ResolveTemplate, variables);
     }
 
     private ParallelStep BuildParallel(ParallelConfig config)

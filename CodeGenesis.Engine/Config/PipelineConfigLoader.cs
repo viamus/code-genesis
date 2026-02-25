@@ -77,12 +77,6 @@ public static partial class PipelineConfigLoader
                     ValidateStepEntries(branch.Steps, $"{entryPath}.parallel.{branch.Name}");
                 }
             }
-            else if (entry.IsGuard)
-            {
-                var gc = entry.Guard!;
-                if (string.IsNullOrWhiteSpace(gc.Collection))
-                    throw new InvalidOperationException($"Guard at {entryPath} is missing 'collection'.");
-            }
             else
             {
                 // Simple step
