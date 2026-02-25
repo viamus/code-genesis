@@ -43,6 +43,7 @@ public sealed class ClaudeCliRunner(
         // Pipe prompt via stdin
         if (request.Prompt is not null)
         {
+            logger.LogDebug("Claude stdin (prompt):\n{Prompt}", request.Prompt);
             await process.StandardInput.WriteAsync(request.Prompt);
             process.StandardInput.Close();
         }
@@ -79,9 +80,15 @@ public sealed class ClaudeCliRunner(
         logger.LogDebug("Claude exited with code {Code} in {Duration:F1}s",
             process.ExitCode, sw.Elapsed.TotalSeconds);
 
+        if (!string.IsNullOrWhiteSpace(stderr))
+            logger.LogDebug("Claude stderr:\n{Stderr}", stderr);
+
+        if (!string.IsNullOrWhiteSpace(stdout))
+            logger.LogDebug("Claude stdout:\n{Stdout}", stdout);
+
         if (process.ExitCode != 0)
         {
-            logger.LogError("Claude stderr: {Stderr}", stderr);
+            logger.LogError("Claude failed (exit {Code}): {Stderr}", process.ExitCode, stderr);
             return ClaudeResponse.Failure(stderr.Trim(), process.ExitCode, sw.Elapsed);
         }
 
