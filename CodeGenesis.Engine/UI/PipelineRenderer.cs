@@ -5,8 +5,10 @@ namespace CodeGenesis.Engine.UI;
 
 public sealed class PipelineRenderer
 {
+    // Shared spinner guard — only one Spectre.Console Status can run at a time
+    private int _spinnerActive;
+
     // AsyncLocal so each parallel task gets its own rendering state
-    private readonly AsyncLocal<bool> _spinnerActive = new();
     private readonly AsyncLocal<int> _depth = new();
     private readonly AsyncLocal<bool> _renderingSuppressed = new();
 
@@ -131,12 +133,12 @@ public sealed class PipelineRenderer
 
     public async Task<StepResult> RunWithSpinner(string name, Func<Task<StepResult>> work)
     {
-        // Skip spinner when suppressed (parallel_foreach) or already inside a spinner
-        if (IsSuppressed || _spinnerActive.Value)
+        // Skip spinner when suppressed or another spinner is already active
+        // (Spectre.Console Status is a singleton — only one can run at a time)
+        if (IsSuppressed || Interlocked.CompareExchange(ref _spinnerActive, 1, 0) != 0)
             return await work();
 
         StepResult result = null!;
-        _spinnerActive.Value = true;
         try
         {
             await AnsiConsole.Status()
@@ -149,7 +151,7 @@ public sealed class PipelineRenderer
         }
         finally
         {
-            _spinnerActive.Value = false;
+            Interlocked.Exchange(ref _spinnerActive, 0);
         }
         return result;
     }
