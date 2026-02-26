@@ -218,6 +218,40 @@ steps:
 
 Each branch runs in an isolated context. After all branches complete, their outputs are merged back into the parent context.
 
+### Parallel Foreach (Concurrent Iteration)
+
+Iterate over a collection **concurrently** — combines foreach's collection parsing with parallel's concurrency model:
+
+```yaml
+steps:
+  - name: "List modules"
+    prompt: "Return a JSON array of module names"
+    output_key: "modules"
+
+  - parallel_foreach:
+      collection: "{{steps.modules}}"    # JSON array or comma-separated string
+      item_var: "module"                  # variable name for current item
+      max_concurrency: 3                  # optional, default = unlimited
+      fail_fast: false                    # optional, cancel siblings on first failure
+      output_key: "results"              # aggregated results as JSON array
+      steps:
+        - name: "Analyze {{module}}"
+          prompt: "Analyze module: {{module}}"
+          output_key: "analysis"
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `collection` | *(required)* | JSON array, comma-separated, or newline-separated string |
+| `item_var` | `"item"` | Variable name for the current item |
+| `max_concurrency` | unlimited | Maximum items processing at the same time |
+| `fail_fast` | `false` | If `true`, cancel remaining items when one fails |
+| `output_key` | `null` | Store all iteration results as a JSON array |
+
+Each iteration gets an isolated context with the same loop variables as `foreach` (`{{loop.item}}`, `{{loop.index}}`, `{{<item_var>}}`). Sub-step rendering is suppressed — only item-level start/completion messages are shown.
+
+See [`examples/parallel-foreach.yml`](examples/parallel-foreach.yml) for a complete working example.
+
 ### Composing Foreach + Parallel
 
 Foreach and parallel can be nested. For example, "for each module, run lint and test in parallel":
@@ -366,6 +400,7 @@ code-genesis-github/
   examples/
     hello-world.yml                  # Sample pipeline
     foreach-parallel.yml             # Foreach + parallel demo
+    parallel-foreach.yml             # Parallel foreach demo
     contexts/
       planner/                       # Sample context bundle
         CONTEXT.md
@@ -402,6 +437,7 @@ code-genesis-github/
       DynamicStep.cs                 # YAML-driven dynamic step
       ForeachStep.cs                 # Iterates over a collection
       ParallelStep.cs                # Runs branches concurrently
+      ParallelForeachStep.cs         # Iterates over a collection concurrently
       StepBuilder.cs                 # Builds step trees from YAML model
     UI/
       PipelineRenderer.cs            # Spectre.Console output
