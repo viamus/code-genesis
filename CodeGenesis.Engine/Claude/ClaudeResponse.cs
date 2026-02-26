@@ -23,9 +23,24 @@ public sealed class ClaudeResponse
             var root = doc.RootElement;
 
             var result = root.TryGetProperty("result", out var r) ? r.GetString() : null;
-            var inputTokens = root.TryGetProperty("input_tokens", out var it) ? it.GetInt32() : 0;
-            var outputTokens = root.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : 0;
-            var cost = root.TryGetProperty("cost_usd", out var c) ? c.GetDouble() : (double?)null;
+
+            // Tokens live inside the "usage" object
+            var inputTokens = 0;
+            var outputTokens = 0;
+            if (root.TryGetProperty("usage", out var usage))
+            {
+                inputTokens = usage.TryGetProperty("input_tokens", out var it) ? it.GetInt32() : 0;
+                outputTokens = usage.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : 0;
+
+                // Include cache tokens in the input total for accurate tracking
+                if (usage.TryGetProperty("cache_creation_input_tokens", out var cc))
+                    inputTokens += cc.GetInt32();
+                if (usage.TryGetProperty("cache_read_input_tokens", out var cr))
+                    inputTokens += cr.GetInt32();
+            }
+
+            // Cost field is "total_cost_usd" in Claude CLI output
+            var cost = root.TryGetProperty("total_cost_usd", out var c) ? c.GetDouble() : (double?)null;
 
             // Handle num_turns for logging
             var numTurns = root.TryGetProperty("num_turns", out var nt) ? nt.GetInt32() : 0;
