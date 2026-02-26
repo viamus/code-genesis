@@ -300,13 +300,14 @@ public sealed class PipelineRenderer
             $"[{ConsoleTheme.SubtleTag}]concurrency: {concurrencyInfo}[/]");
     }
 
-    public void RenderParallelBranchComplete(string branchName, bool success)
+    public void RenderParallelBranchComplete(string branchName, bool success, TimeSpan elapsed, int tokens, double cost)
     {
         var (icon, colorTag) = success
             ? (ConsoleTheme.Check, ConsoleTheme.SuccessTag)
             : (ConsoleTheme.Cross, ConsoleTheme.ErrorTag);
+        var metrics = FormatMetrics(elapsed, tokens, cost);
         AnsiConsole.MarkupLine(
-            $"{Indent}  [{colorTag}]{icon} {branchName.EscapeMarkup()}[/]");
+            $"{Indent}  [{colorTag}]{icon}[/] {branchName.EscapeMarkup()}  {metrics}");
     }
 
     // ── Utilities ─────────────────────────────────────────────────────

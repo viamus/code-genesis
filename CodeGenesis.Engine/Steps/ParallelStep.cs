@@ -42,6 +42,10 @@ public sealed class ParallelStep(
                 await semaphore.WaitAsync(linkedCts.Token);
                 try
                 {
+                    // Suppress sub-step rendering; only branch-level messages show
+                    renderer.PushScope();
+                    renderer.SuppressRendering();
+
                     // Create isolated context for this branch
                     var branchContext = new PipelineContext
                     {
@@ -57,6 +61,8 @@ public sealed class ParallelStep(
                     var branchVars = new Dictionary<string, string>(variables);
                     foreach (var (key, value) in context.StepOutputs)
                         branchVars[$"steps.{key}"] = value;
+
+                    var branchSw = Stopwatch.StartNew();
 
                     var success = await executor.RunAsync(branchSteps, branchContext, linkedCts.Token,
                         onBeforeStep: step =>
@@ -76,15 +82,21 @@ public sealed class ParallelStep(
                             }
                         });
 
+                    branchSw.Stop();
                     branchResults[index] = (success, branchContext, branch.Name);
 
                     if (!success && config.FailFast)
                         await linkedCts.CancelAsync();
 
-                    renderer.RenderParallelBranchComplete(branch.Name, success);
+                    // Resume rendering for our own branch completion message
+                    renderer.ResumeRendering();
+                    var branchTokens = branchContext.TotalInputTokens + branchContext.TotalOutputTokens;
+                    renderer.RenderParallelBranchComplete(branch.Name, success, branchSw.Elapsed, branchTokens, branchContext.TotalCostUsd);
                 }
                 finally
                 {
+                    renderer.ResumeRendering();
+                    renderer.PopScope();
                     semaphore.Release();
                 }
             }, linkedCts.Token);
