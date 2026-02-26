@@ -62,6 +62,15 @@ public static partial class PipelineConfigLoader
                     throw new InvalidOperationException($"Foreach at {entryPath} must have at least one sub-step.");
                 ValidateStepEntries(fc.Steps, $"{entryPath}.foreach");
             }
+            else if (entry.IsParallelForeach)
+            {
+                var pfc = entry.ParallelForeach!;
+                if (string.IsNullOrWhiteSpace(pfc.Collection))
+                    throw new InvalidOperationException($"Parallel_foreach at {entryPath} is missing 'collection'.");
+                if (pfc.Steps.Count == 0)
+                    throw new InvalidOperationException($"Parallel_foreach at {entryPath} must have at least one sub-step.");
+                ValidateStepEntries(pfc.Steps, $"{entryPath}.parallel_foreach");
+            }
             else if (entry.IsParallel)
             {
                 var pc = entry.Parallel!;

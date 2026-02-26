@@ -1,0 +1,56 @@
+pipeline:
+  name: "Parallel Foreach Demo"
+  description: "Demonstrates parallel_foreach — iterating a collection concurrently"
+  version: "1.0"
+
+settings:
+  model: "claude-sonnet-4-6"
+  max_turns: 3
+
+inputs:
+  modules:
+    description: "Comma-separated list of modules to analyze"
+    default: "auth,api,database,cache,logging"
+
+steps:
+  # Step 1: Prepare a JSON array from the input
+  - name: "Prepare modules"
+    prompt: |
+      Return ONLY a JSON array of module names from this list: {{modules}}
+      Example: ["auth","api","database","cache","logging"]
+      Return ONLY the JSON array, nothing else.
+    max_turns: 1
+    output_key: "module_list"
+
+  # Step 2: Process all modules concurrently (max 3 at a time)
+  - parallel_foreach:
+      collection: "{{steps.module_list}}"
+      item_var: "module"
+      max_concurrency: 3
+      fail_fast: false
+      output_key: "module_results"
+      steps:
+        - name: "Analyze {{module}}"
+          prompt: |
+            You are a software architect. Briefly analyze the "{{module}}" module:
+            1. What is its core responsibility? (1 sentence)
+            2. What are common pitfalls? (1-2 sentences)
+            3. One key recommendation. (1 sentence)
+            Be concise.
+          max_turns: 1
+          output_key: "analysis"
+
+  # Step 3: Summarize all results
+  - name: "Summarize"
+    prompt: |
+      Summarize the following module analyses into a concise architecture overview:
+      {{steps.module_results}}
+
+      Provide a 3-5 sentence summary highlighting patterns and recommendations.
+    max_turns: 1
+    output_key: "summary"
+
+outputs:
+  summary:
+    source: "steps.summary"
+    description: "Architecture overview from parallel module analysis"

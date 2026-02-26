@@ -160,10 +160,14 @@ public sealed class StepEntry
     [YamlMember(Alias = "parallel")]
     public ParallelConfig? Parallel { get; set; }
 
+    [YamlMember(Alias = "parallel_foreach")]
+    public ParallelForeachConfig? ParallelForeach { get; set; }
+
     // --- Discriminators ---
-    public bool IsSimpleStep => Foreach is null && Parallel is null && Name is not null;
+    public bool IsSimpleStep => Foreach is null && Parallel is null && ParallelForeach is null && Name is not null;
     public bool IsForeach => Foreach is not null;
     public bool IsParallel => Parallel is not null;
+    public bool IsParallelForeach => ParallelForeach is not null;
 
     /// <summary>Converts a simple StepEntry to the legacy StepConfig model.</summary>
     public StepConfig ToStepConfig() => new()
@@ -215,6 +219,27 @@ public sealed class ParallelBranch
 {
     [YamlMember(Alias = "name")]
     public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "output_key")]
+    public string? OutputKey { get; set; }
+
+    [YamlMember(Alias = "steps")]
+    public List<StepEntry> Steps { get; set; } = [];
+}
+
+public sealed class ParallelForeachConfig
+{
+    [YamlMember(Alias = "collection")]
+    public string Collection { get; set; } = "";
+
+    [YamlMember(Alias = "item_var")]
+    public string ItemVar { get; set; } = "item";
+
+    [YamlMember(Alias = "max_concurrency")]
+    public int? MaxConcurrency { get; set; }
+
+    [YamlMember(Alias = "fail_fast")]
+    public bool FailFast { get; set; }
 
     [YamlMember(Alias = "output_key")]
     public string? OutputKey { get; set; }

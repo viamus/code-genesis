@@ -29,7 +29,7 @@ public sealed class PipelineExecutor(
             {
                 // Composite steps (foreach, parallel) render their own progress;
                 // wrapping them in a spinner would swallow sub-step output.
-                if (step is ForeachStep or ParallelStep)
+                if (step is ForeachStep or ParallelStep or ParallelForeachStep)
                     result = await step.ExecuteAsync(context, ct);
                 else
                     result = await renderer.RunWithSpinner(

@@ -29,6 +29,9 @@ public sealed class StepBuilder(
         if (entry.IsParallel)
             return BuildParallel(entry.Parallel!);
 
+        if (entry.IsParallelForeach)
+            return BuildParallelForeach(entry.ParallelForeach!);
+
         return BuildSimple(entry);
     }
 
@@ -58,6 +61,14 @@ public sealed class StepBuilder(
     {
         var subSteps = BuildAll(config.Steps);
         return new ForeachStep(
+            config, subSteps, executor, renderer,
+            PipelineConfigLoader.ResolveTemplate, variables);
+    }
+
+    private ParallelForeachStep BuildParallelForeach(ParallelForeachConfig config)
+    {
+        var subSteps = BuildAll(config.Steps);
+        return new ParallelForeachStep(
             config, subSteps, executor, renderer,
             PipelineConfigLoader.ResolveTemplate, variables);
     }

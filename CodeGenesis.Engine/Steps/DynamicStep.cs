@@ -22,6 +22,9 @@ public sealed class DynamicStep(
     public void UpdateResolvedPrompt(string prompt) => _resolvedPrompt = prompt;
     public void UpdateResolvedSystemPrompt(string? systemPrompt) => _resolvedSystemPrompt = systemPrompt;
 
+    /// <summary>Creates a shallow clone with its own mutable prompt state, safe for parallel execution.</summary>
+    public DynamicStep Clone() => new(claude, stepConfig, _resolvedPrompt, _resolvedSystemPrompt, model);
+
     public async Task<StepResult> ExecuteAsync(PipelineContext context, CancellationToken ct)
     {
         var request = new ClaudeRequest
