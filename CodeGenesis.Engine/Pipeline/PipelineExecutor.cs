@@ -27,9 +27,11 @@ public sealed class PipelineExecutor(
             StepResult result;
             try
             {
-                // Composite steps (foreach, parallel) render their own progress;
-                // wrapping them in a spinner would swallow sub-step output.
-                if (step is ForeachStep or ParallelStep or ParallelForeachStep)
+                // Foreach renders its own sequential progress interleaved with sub-steps;
+                // wrapping it in a spinner would swallow that output.
+                // Parallel/ParallelForeach suppress sub-step rendering, so the spinner
+                // runs at the bottom while branch/item completions appear above it.
+                if (step is ForeachStep)
                     result = await step.ExecuteAsync(context, ct);
                 else
                     result = await renderer.RunWithSpinner(
