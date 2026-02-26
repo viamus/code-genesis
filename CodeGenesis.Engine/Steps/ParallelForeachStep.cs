@@ -63,10 +63,16 @@ public sealed class ParallelForeachStep(
                 await semaphore.WaitAsync(linkedCts.Token);
                 try
                 {
+                    // Suppress all sub-step rendering; only item-level messages show
+                    renderer.PushScope();
+                    renderer.SuppressRendering();
+
                     // Skip null or empty items
                     if (string.IsNullOrWhiteSpace(item))
                     {
+                        renderer.ResumeRendering();
                         renderer.RenderParallelForeachItemStart("(empty)", index, items.Count);
+                        renderer.SuppressRendering();
                         var emptyCtx = new PipelineContext
                         {
                             TaskDescription = context.TaskDescription,
@@ -76,7 +82,10 @@ public sealed class ParallelForeachStep(
                         return;
                     }
 
+                    // Temporarily resume to render our own item-level message
+                    renderer.ResumeRendering();
                     renderer.RenderParallelForeachItemStart(item, index, items.Count);
+                    renderer.SuppressRendering();
 
                     // Create isolated context for this iteration
                     var iterationContext = new PipelineContext
@@ -112,11 +121,15 @@ public sealed class ParallelForeachStep(
                     if (!success && config.FailFast)
                         await linkedCts.CancelAsync();
 
+                    // Resume rendering for our own completion message
+                    renderer.ResumeRendering();
                     var iterTokens = iterationContext.TotalInputTokens + iterationContext.TotalOutputTokens;
                     renderer.RenderParallelForeachItemComplete(item, index, items.Count, success, iterSw.Elapsed, iterTokens, iterationContext.TotalCostUsd);
                 }
                 finally
                 {
+                    renderer.ResumeRendering();
+                    renderer.PopScope();
                     semaphore.Release();
                 }
             }, linkedCts.Token);

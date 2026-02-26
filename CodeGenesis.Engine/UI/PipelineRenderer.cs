@@ -5,16 +5,24 @@ namespace CodeGenesis.Engine.UI;
 
 public sealed class PipelineRenderer
 {
-    private bool _spinnerActive;
-    private int _depth;
+    // AsyncLocal so each parallel task gets its own rendering state
+    private readonly AsyncLocal<bool> _spinnerActive = new();
+    private readonly AsyncLocal<int> _depth = new();
+    private readonly AsyncLocal<bool> _renderingSuppressed = new();
 
     // ── Depth / scope management ──────────────────────────────────────
 
-    public void PushScope() => _depth++;
-    public void PopScope() => _depth = Math.Max(0, _depth - 1);
+    public void PushScope() => _depth.Value++;
+    public void PopScope() => _depth.Value = Math.Max(0, _depth.Value - 1);
 
-    private string Indent => _depth > 0
-        ? new string(' ', 2) + string.Concat(Enumerable.Repeat($"[{ConsoleTheme.SubtleTag}]│[/]  ", _depth))
+    /// <summary>Suppresses all step-level rendering (step start/complete/spinner) in the current async flow.</summary>
+    public void SuppressRendering() => _renderingSuppressed.Value = true;
+    public void ResumeRendering() => _renderingSuppressed.Value = false;
+
+    private bool IsSuppressed => _renderingSuppressed.Value;
+
+    private string Indent => _depth.Value > 0
+        ? new string(' ', 2) + string.Concat(Enumerable.Repeat($"[{ConsoleTheme.SubtleTag}]│[/]  ", _depth.Value))
         : "  ";
 
     // ── Banner ────────────────────────────────────────────────────────
@@ -38,8 +46,8 @@ public sealed class PipelineRenderer
 
     public void RenderPipelineStart(PipelineContext context, int totalSteps)
     {
-        // Suppress nested pipeline headers (e.g. inside foreach iterations)
-        if (_depth > 0) return;
+        // Suppress nested pipeline headers (e.g. inside foreach/parallel iterations)
+        if (_depth.Value > 0 || IsSuppressed) return;
 
         AnsiConsole.MarkupLine(
             $"  [{ConsoleTheme.MutedTag}]Task[/]    {context.TaskDescription.EscapeMarkup()}");
@@ -58,7 +66,7 @@ public sealed class PipelineRenderer
     public void RenderPipelineSummary(PipelineContext context)
     {
         // Suppress nested pipeline summaries
-        if (_depth > 0) return;
+        if (_depth.Value > 0 || IsSuppressed) return;
 
         AnsiConsole.Write(new Rule().RuleStyle(new Style(ConsoleTheme.Subtle)));
         AnsiConsole.WriteLine();
@@ -97,7 +105,7 @@ public sealed class PipelineRenderer
     public void RenderPipelineFailed(PipelineContext context)
     {
         // Suppress nested pipeline failure banners
-        if (_depth > 0) return;
+        if (_depth.Value > 0 || IsSuppressed) return;
 
         AnsiConsole.Write(new Rule().RuleStyle(new Style(ConsoleTheme.Error)));
         AnsiConsole.WriteLine();
@@ -113,6 +121,7 @@ public sealed class PipelineRenderer
 
     public void RenderStepStart(IPipelineStep step, int index, int total)
     {
+        if (IsSuppressed) return;
         AnsiConsole.MarkupLine(
             $"{Indent}[{ConsoleTheme.SecondaryTag} bold]{ConsoleTheme.Arrow} Step {index}/{total}[/]  " +
             $"[bold]{step.Name.EscapeMarkup()}[/]");
@@ -122,11 +131,12 @@ public sealed class PipelineRenderer
 
     public async Task<StepResult> RunWithSpinner(string name, Func<Task<StepResult>> work)
     {
-        if (_spinnerActive)
+        // Skip spinner when suppressed (parallel_foreach) or already inside a spinner
+        if (IsSuppressed || _spinnerActive.Value)
             return await work();
 
         StepResult result = null!;
-        _spinnerActive = true;
+        _spinnerActive.Value = true;
         try
         {
             await AnsiConsole.Status()
@@ -139,13 +149,14 @@ public sealed class PipelineRenderer
         }
         finally
         {
-            _spinnerActive = false;
+            _spinnerActive.Value = false;
         }
         return result;
     }
 
     public void RenderStepComplete(IPipelineStep step, StepResult result)
     {
+        if (IsSuppressed) return;
         var (icon, colorTag) = result.Outcome switch
         {
             StepOutcome.Success => (ConsoleTheme.Check, ConsoleTheme.SuccessTag),
@@ -170,6 +181,7 @@ public sealed class PipelineRenderer
 
     public void RenderStepCancelled(IPipelineStep step)
     {
+        if (IsSuppressed) return;
         AnsiConsole.MarkupLine(
             $"{Indent}[{ConsoleTheme.WarningTag}]{ConsoleTheme.Cross}[/] {step.Name.EscapeMarkup()}  " +
             $"[{ConsoleTheme.WarningTag}]cancelled[/]");
@@ -178,6 +190,7 @@ public sealed class PipelineRenderer
 
     public void RenderStepException(IPipelineStep step, Exception ex)
     {
+        if (IsSuppressed) return;
         AnsiConsole.MarkupLine(
             $"{Indent}[{ConsoleTheme.ErrorTag}]{ConsoleTheme.Cross}[/] {step.Name.EscapeMarkup()}  " +
             $"[{ConsoleTheme.ErrorTag}]exception[/]");
