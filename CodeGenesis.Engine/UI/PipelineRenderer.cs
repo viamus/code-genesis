@@ -221,6 +221,57 @@ public sealed class PipelineRenderer
         AnsiConsole.WriteLine();
     }
 
+    // ── Parallel Foreach ──────────────────────────────────────────────
+
+    public void RenderParallelForeachStart(string itemVar, int itemCount, int? maxConcurrency)
+    {
+        var concurrencyInfo = maxConcurrency.HasValue
+            ? $"max {maxConcurrency}"
+            : "unlimited";
+        AnsiConsole.MarkupLine(
+            $"{Indent}[{ConsoleTheme.PrimaryTag}]\u26a1[/] " +
+            $"[{ConsoleTheme.SecondaryTag}]parallel_foreach[/] " +
+            $"[{ConsoleTheme.MutedTag}]{itemVar.EscapeMarkup()}[/]  " +
+            $"[{ConsoleTheme.SubtleTag}]{itemCount} item(s)  concurrency: {concurrencyInfo}[/]");
+        AnsiConsole.WriteLine();
+    }
+
+    public void RenderParallelForeachItemStart(string itemValue, int index, int total)
+    {
+        AnsiConsole.MarkupLine(
+            $"{Indent}  [{ConsoleTheme.PrimaryTag}]\u25cb[/] " +
+            $"[{ConsoleTheme.SecondaryTag}][[{index + 1}/{total}]][/] " +
+            $"[bold]{Truncate(itemValue, 50).EscapeMarkup()}[/]");
+    }
+
+    public void RenderParallelForeachItemComplete(string itemValue, int index, int total, bool success, TimeSpan elapsed, int tokens, double cost)
+    {
+        var (icon, colorTag) = success
+            ? (ConsoleTheme.Check, ConsoleTheme.SuccessTag)
+            : (ConsoleTheme.Cross, ConsoleTheme.ErrorTag);
+        var metrics = FormatMetrics(elapsed, tokens, cost);
+
+        AnsiConsole.MarkupLine(
+            $"{Indent}  [{colorTag}]{icon}[/] " +
+            $"[{ConsoleTheme.MutedTag}][[{index + 1}/{total}]][/] " +
+            $"{Truncate(itemValue, 50).EscapeMarkup()}  {metrics}");
+    }
+
+    public void RenderParallelForeachEnd(int total, int succeeded, int failed)
+    {
+        AnsiConsole.WriteLine();
+        if (failed == 0)
+        {
+            AnsiConsole.MarkupLine(
+                $"{Indent}  [{ConsoleTheme.SuccessTag}]\u26a1 {total}/{total} completed[/]");
+        }
+        else
+        {
+            AnsiConsole.MarkupLine(
+                $"{Indent}  [{ConsoleTheme.ErrorTag}]\u26a1 {succeeded} completed, {failed} failed[/]");
+        }
+    }
+
     // ── Parallel ──────────────────────────────────────────────────────
 
     public void RenderParallelStart(int branchCount, int? maxConcurrency)

@@ -33,7 +33,7 @@ public sealed class ParallelForeachStep(
         var collectionRaw = resolveTemplate(config.Collection, allVars);
         var items = CollectionParser.Parse(collectionRaw);
 
-        renderer.RenderForeachStart(config.ItemVar, items.Count);
+        renderer.RenderParallelForeachStart(config.ItemVar, items.Count, config.MaxConcurrency);
 
         if (items.Count == 0)
         {
@@ -66,7 +66,7 @@ public sealed class ParallelForeachStep(
                     // Skip null or empty items
                     if (string.IsNullOrWhiteSpace(item))
                     {
-                        renderer.RenderForeachIteration(config.ItemVar, "(empty)", index, items.Count);
+                        renderer.RenderParallelForeachItemStart("(empty)", index, items.Count);
                         var emptyCtx = new PipelineContext
                         {
                             TaskDescription = context.TaskDescription,
@@ -76,7 +76,7 @@ public sealed class ParallelForeachStep(
                         return;
                     }
 
-                    renderer.RenderForeachIteration(config.ItemVar, item, index, items.Count);
+                    renderer.RenderParallelForeachItemStart(item, index, items.Count);
 
                     // Create isolated context for this iteration
                     var iterationContext = new PipelineContext
@@ -113,7 +113,7 @@ public sealed class ParallelForeachStep(
                         await linkedCts.CancelAsync();
 
                     var iterTokens = iterationContext.TotalInputTokens + iterationContext.TotalOutputTokens;
-                    renderer.RenderForeachIterationComplete(item, index, items.Count, iterSw.Elapsed, iterTokens, iterationContext.TotalCostUsd);
+                    renderer.RenderParallelForeachItemComplete(item, index, items.Count, success, iterSw.Elapsed, iterTokens, iterationContext.TotalCostUsd);
                 }
                 finally
                 {
@@ -174,6 +174,10 @@ public sealed class ParallelForeachStep(
             var json = JsonSerializer.Serialize(aggregatedResults);
             context.StepOutputs[config.OutputKey] = json;
         }
+
+        var succeeded = iterationResults.Count(r => r.Success);
+        var failed = items.Count - succeeded;
+        renderer.RenderParallelForeachEnd(items.Count, succeeded, failed);
 
         return new StepResult
         {
