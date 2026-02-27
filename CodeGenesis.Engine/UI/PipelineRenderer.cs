@@ -310,6 +310,76 @@ public sealed class PipelineRenderer
             $"{Indent}  [{colorTag}]{icon}[/] {branchName.EscapeMarkup()}  {metrics}");
     }
 
+    // ── Approval ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Renders a styled approval panel and prompts the user for confirmation.
+    /// Returns true if the user approves, false if they reject.
+    /// </summary>
+    public bool RenderApprovalPrompt(string message, string? displayValue, CancellationToken ct)
+    {
+        AnsiConsole.WriteLine();
+
+        // Build panel content
+        var content = new Markup(
+            $"[{ConsoleTheme.WarningTag} bold]  {"\u26A0"} APPROVAL REQUIRED[/]\n\n" +
+            $"  {message.EscapeMarkup()}");
+
+        var panel = new Panel(content)
+            .Border(BoxBorder.Double)
+            .BorderStyle(new Style(ConsoleTheme.Warning))
+            .Padding(1, 1);
+
+        AnsiConsole.Write(panel);
+
+        // Optionally render the display value from a previous step
+        if (!string.IsNullOrWhiteSpace(displayValue))
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine($"  [{ConsoleTheme.MutedTag}]Preview:[/]");
+
+            var previewPanel = new Panel(new Text(Truncate(displayValue, 2000)))
+                .Border(BoxBorder.Rounded)
+                .BorderStyle(new Style(ConsoleTheme.Subtle))
+                .Padding(1, 0);
+
+            AnsiConsole.Write(previewPanel);
+        }
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.Markup(
+            $"  [{ConsoleTheme.PrimaryTag} bold]Continue?[/] " +
+            $"[{ConsoleTheme.MutedTag}][[y/N]][/] ");
+
+        while (true)
+        {
+            if (ct.IsCancellationRequested)
+                return false;
+
+            var input = Console.ReadLine()?.Trim().ToLowerInvariant() ?? "";
+
+            if (input is "y" or "yes" or "ok")
+            {
+                AnsiConsole.MarkupLine(
+                    $"  [{ConsoleTheme.SuccessTag}]{ConsoleTheme.Check} Approved — continuing pipeline.[/]");
+                AnsiConsole.WriteLine();
+                return true;
+            }
+
+            if (input is "n" or "no" or "" )
+            {
+                AnsiConsole.MarkupLine(
+                    $"  [{ConsoleTheme.ErrorTag}]{ConsoleTheme.Cross} Rejected — pipeline will stop.[/]");
+                AnsiConsole.WriteLine();
+                return false;
+            }
+
+            // Invalid input — re-prompt
+            AnsiConsole.Markup(
+                $"  [{ConsoleTheme.WarningTag}]Please type y (yes) or n (no):[/] ");
+        }
+    }
+
     // ── Utilities ─────────────────────────────────────────────────────
 
     public void RenderError(string message)

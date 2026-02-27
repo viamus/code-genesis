@@ -32,6 +32,9 @@ public sealed class StepBuilder(
         if (entry.IsParallelForeach)
             return BuildParallelForeach(entry.ParallelForeach!);
 
+        if (entry.IsApproval)
+            return new ApprovalStep(entry.Approval!, renderer);
+
         return BuildSimple(entry);
     }
 

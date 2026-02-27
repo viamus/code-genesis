@@ -276,6 +276,45 @@ steps:
 
 See [`examples/foreach-parallel.yml`](examples/foreach-parallel.yml) for a complete working example.
 
+### Approval Step
+
+The `approval` step pauses pipeline execution and prompts the user for confirmation directly in the console. If the user accepts, the pipeline continues; if they reject, the pipeline stops with a failure.
+
+```yaml
+steps:
+  - name: Generate plan
+    prompt: "Create a deployment plan for the project"
+    output_key: deployment_plan
+
+  - approval:
+      name: "Approve deployment plan"
+      message: "Review the plan above and confirm you want to proceed with deployment."
+      display_key: deployment_plan   # optional: shows the value of this output in the panel
+
+  - name: Execute deployment
+    prompt: "Execute the deployment plan"
+```
+
+**Fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | No | Label shown in the pipeline progress (default: `"Approval"`) |
+| `description` | No | Sub-label shown under the step name |
+| `message` | No | Message displayed inside the approval panel |
+| `display_key` | No | `output_key` of a previous step whose output is shown as a preview |
+
+**Behavior:**
+- The step renders a double-bordered panel in the console with `⚠ APPROVAL REQUIRED` and your message.
+- If `display_key` is set, the referenced step output is shown in a rounded preview box below the panel.
+- The user is prompted `Continue? [y/N]`. Accepted inputs:
+  - **Approve:** `y`, `yes`, `ok`
+  - **Reject:** `n`, `no`, or pressing Enter (defaults to no)
+- Any other input re-prompts the user.
+- On rejection the pipeline stops immediately with a `Pipeline Failed` banner.
+
+See [`examples/approval.yml`](examples/approval.yml) for a complete working example.
+
 ### Understanding `max_turns`
 
 A **turn** is one complete round-trip between CodeGenesis and Claude: the engine sends a prompt, Claude reasons about it, optionally calls tools (Read, Write, Edit, Bash, etc.), and returns a response. Complex tasks often require multiple turns — for example, Claude might read a file in turn 1, edit it in turn 2, and run tests in turn 3.

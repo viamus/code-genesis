@@ -31,7 +31,8 @@ public sealed class PipelineExecutor(
                 // wrapping it in a spinner would swallow that output.
                 // Parallel/ParallelForeach suppress sub-step rendering, so the spinner
                 // runs at the bottom while branch/item completions appear above it.
-                if (step is ForeachStep)
+                // ApprovalStep requires interactive Console input — no spinner.
+                if (step is ForeachStep or ApprovalStep)
                     result = await step.ExecuteAsync(context, ct);
                 else
                     result = await renderer.RunWithSpinner(
