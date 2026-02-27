@@ -15,4 +15,8 @@ public sealed class PipelineContext
     public TimeSpan TotalDuration { get; set; }
     public int StepsCompleted { get; set; }
     public int StepsFailed { get; set; }
+
+    /// <summary>Set when the pipeline aborts — holds the step name and error for the failure banner.</summary>
+    public string? FailedStepName { get; set; }
+    public string? FailureReason { get; set; }
 }

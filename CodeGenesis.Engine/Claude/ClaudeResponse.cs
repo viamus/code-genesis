@@ -23,6 +23,8 @@ public sealed class ClaudeResponse
             var root = doc.RootElement;
 
             var result = root.TryGetProperty("result", out var r) ? r.GetString() : null;
+            var subtype = root.TryGetProperty("subtype", out var st) ? st.GetString() : null;
+            var isError = root.TryGetProperty("is_error", out var ie) && ie.GetBoolean();
 
             // Tokens live inside the "usage" object
             var inputTokens = 0;
@@ -42,8 +44,29 @@ public sealed class ClaudeResponse
             // Cost field is "total_cost_usd" in Claude CLI output
             var cost = root.TryGetProperty("total_cost_usd", out var c) ? c.GetDouble() : (double?)null;
 
-            // Handle num_turns for logging
             var numTurns = root.TryGetProperty("num_turns", out var nt) ? nt.GetInt32() : 0;
+
+            // Claude CLI exits with code 0 even when max_turns is reached.
+            // Detect via subtype or is_error so the pipeline fails fast instead of hanging.
+            if (subtype == "error_max_turns" || isError)
+            {
+                var errorDetail = result ?? subtype ?? "unknown error";
+                var errorMsg = subtype == "error_max_turns"
+                    ? $"Step reached max_turns limit ({numTurns} turn(s) used) without completing. Increase max_turns or simplify the step."
+                    : $"Claude returned an error: {errorDetail}";
+
+                return new ClaudeResponse
+                {
+                    Success = false,
+                    ExitCode = 0,
+                    RawOutput = json,
+                    ErrorMessage = errorMsg,
+                    InputTokens = inputTokens,
+                    OutputTokens = outputTokens,
+                    CostUsd = cost,
+                    Duration = duration
+                };
+            }
 
             return new ClaudeResponse
             {

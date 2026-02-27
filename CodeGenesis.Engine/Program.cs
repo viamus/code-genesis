@@ -7,6 +7,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Spectre.Console.Cli;
 
+// Ensure Unicode symbols render correctly in all Windows console hosts
+Console.OutputEncoding = System.Text.Encoding.UTF8;
+
 // ── Serilog bootstrap ──────────────────────────────────────────
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Debug()

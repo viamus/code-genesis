@@ -31,7 +31,8 @@ public sealed class PipelineExecutor(
                 // wrapping it in a spinner would swallow that output.
                 // Parallel/ParallelForeach suppress sub-step rendering, so the spinner
                 // runs at the bottom while branch/item completions appear above it.
-                if (step is ForeachStep)
+                // ApprovalStep requires interactive Console input — no spinner.
+                if (step is ForeachStep or ApprovalStep)
                     result = await step.ExecuteAsync(context, ct);
                 else
                     result = await renderer.RunWithSpinner(
@@ -42,6 +43,11 @@ public sealed class PipelineExecutor(
             {
                 renderer.RenderStepCancelled(step);
                 context.StepsFailed++;
+                context.FailedStepName = step.Name;
+                context.FailureReason = "Pipeline was cancelled.";
+                pipelineSw.Stop();
+                context.TotalDuration = pipelineSw.Elapsed;
+                renderer.RenderPipelineFailed(context);
                 return false;
             }
             catch (Exception ex)
@@ -49,6 +55,11 @@ public sealed class PipelineExecutor(
                 logger.LogError(ex, "Step '{Step}' threw unhandled exception", step.Name);
                 renderer.RenderStepException(step, ex);
                 context.StepsFailed++;
+                context.FailedStepName = step.Name;
+                context.FailureReason = ex.Message;
+                pipelineSw.Stop();
+                context.TotalDuration = pipelineSw.Elapsed;
+                renderer.RenderPipelineFailed(context);
                 return false;
             }
 
@@ -58,6 +69,8 @@ public sealed class PipelineExecutor(
             {
                 logger.LogError("Pipeline aborted at step '{Step}': {Error}", step.Name, result.Error);
                 context.StepsFailed++;
+                context.FailedStepName = step.Name;
+                context.FailureReason = result.Error;
                 pipelineSw.Stop();
                 context.TotalDuration = pipelineSw.Elapsed;
                 renderer.RenderPipelineFailed(context);
