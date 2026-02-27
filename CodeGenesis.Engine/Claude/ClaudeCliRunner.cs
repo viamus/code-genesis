@@ -145,7 +145,7 @@ public sealed class ClaudeCliRunner(
                     continue;
                 }
 
-                if (type == "assistant" && onProgress is not null)
+                if (type == "assistant")
                 {
                     ProcessAssistantEvent(root, onProgress);
                 }
@@ -161,9 +161,9 @@ public sealed class ClaudeCliRunner(
     }
 
     /// <summary>
-    /// Extracts thinking and tool_use content from an assistant event and fires progress callbacks.
+    /// Extracts thinking and tool_use content from an assistant event, logs it, and fires progress callbacks.
     /// </summary>
-    private static void ProcessAssistantEvent(JsonElement root, Action<ClaudeProgressEvent> onProgress)
+    private void ProcessAssistantEvent(JsonElement root, Action<ClaudeProgressEvent>? onProgress)
     {
         if (!root.TryGetProperty("message", out var message))
             return;
@@ -185,7 +185,8 @@ public sealed class ClaudeCliRunner(
                 if (!string.IsNullOrWhiteSpace(thinking))
                 {
                     var summary = TruncateThinking(thinking!);
-                    onProgress(new ClaudeProgressEvent(ClaudeProgressType.Thinking, summary));
+                    logger.LogDebug("Claude thinking: {Summary}", summary);
+                    onProgress?.Invoke(new ClaudeProgressEvent(ClaudeProgressType.Thinking, summary));
                 }
             }
             else if (itemTypeStr == "tool_use")
@@ -194,7 +195,8 @@ public sealed class ClaudeCliRunner(
                 if (toolName is not null)
                 {
                     var summary = SummarizeToolUse(toolName, item);
-                    onProgress(new ClaudeProgressEvent(ClaudeProgressType.ToolUse, summary));
+                    logger.LogDebug("Claude tool_use: {Summary}", summary);
+                    onProgress?.Invoke(new ClaudeProgressEvent(ClaudeProgressType.ToolUse, summary));
                 }
             }
         }
