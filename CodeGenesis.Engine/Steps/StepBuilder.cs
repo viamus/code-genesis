@@ -14,6 +14,7 @@ public sealed class StepBuilder(
     PipelineRenderer renderer,
     string pipelineDir,
     string? globalModel,
+    PipelineSettings? globalSettings,
     Dictionary<string, string> variables)
 {
     public List<IPipelineStep> BuildAll(IReadOnlyList<StepEntry> entries)
@@ -57,7 +58,8 @@ public sealed class StepBuilder(
             ? PipelineConfigLoader.ResolveTemplate(stepConfig.SystemPrompt, variables)
             : null;
 
-        return new DynamicStep(claude, stepConfig, resolvedPrompt, resolvedSystemPrompt, stepModel);
+        var retryPolicy = RetryPolicy.Resolve(stepConfig, globalSettings);
+        return new DynamicStep(claude, stepConfig, resolvedPrompt, resolvedSystemPrompt, stepModel, retryPolicy);
     }
 
     private ForeachStep BuildForeach(ForeachConfig config)
