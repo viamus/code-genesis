@@ -248,7 +248,7 @@ public sealed class ClaudeCliRunner(
     private string BuildArguments(ClaudeRequest request)
     {
         var sb = new StringBuilder();
-        sb.Append("--print --output-format stream-json");
+        sb.Append("--print --verbose --output-format stream-json");
 
         var model = request.Model ?? _options.DefaultModel;
         if (model is not null)
