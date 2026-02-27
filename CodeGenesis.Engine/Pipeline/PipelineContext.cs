@@ -19,4 +19,7 @@ public sealed class PipelineContext
     /// <summary>Set when the pipeline aborts — holds the step name and error for the failure banner.</summary>
     public string? FailedStepName { get; set; }
     public string? FailureReason { get; set; }
+
+    /// <summary>Callback to update the visual status of the currently running step (spinner text or thinking line).</summary>
+    public Action<string>? StatusUpdate { get; set; }
 }

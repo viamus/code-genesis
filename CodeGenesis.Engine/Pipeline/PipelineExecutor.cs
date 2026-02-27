@@ -37,6 +37,7 @@ public sealed class PipelineExecutor(
                 else
                     result = await renderer.RunWithSpinner(
                         step.Name,
+                        context,
                         () => step.ExecuteAsync(context, ct));
             }
             catch (OperationCanceledException)

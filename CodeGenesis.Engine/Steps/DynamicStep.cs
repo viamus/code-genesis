@@ -34,7 +34,14 @@ public sealed class DynamicStep(
             Model = model,
             MaxTurns = stepConfig.MaxTurns,
             WorkingDirectory = context.WorkingDirectory,
-            AllowedTools = stepConfig.AllowedTools ?? []
+            AllowedTools = stepConfig.AllowedTools ?? [],
+            OnProgress = context.StatusUpdate is not null
+                ? evt =>
+                {
+                    var icon = evt.Type == ClaudeProgressType.Thinking ? "\U0001F4AD" : "\U0001F527";
+                    context.StatusUpdate?.Invoke($"{icon} {evt.Message}");
+                }
+                : null
         };
 
         var response = await claude.RunAsync(request, ct);

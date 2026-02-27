@@ -170,7 +170,7 @@ public sealed class PipelineRenderer
             $"{Indent}[{ConsoleTheme.MutedTag}]  {step.Description.EscapeMarkup()}[/]");
     }
 
-    public async Task<StepResult> RunWithSpinner(string name, Func<Task<StepResult>> work)
+    public async Task<StepResult> RunWithSpinner(string name, PipelineContext context, Func<Task<StepResult>> work)
     {
         // Skip spinner when suppressed or another spinner is already active
         // (Spectre.Console Status is a singleton — only one can run at a time)
@@ -178,21 +178,39 @@ public sealed class PipelineRenderer
             return await work();
 
         StepResult result = null!;
+        var savedStatusUpdate = context.StatusUpdate;
         try
         {
             await AnsiConsole.Status()
                 .Spinner(Spinner.Known.Dots2)
                 .SpinnerStyle(new Style(ConsoleTheme.Primary))
-                .StartAsync($"{Indent}[{ConsoleTheme.MutedTag}]Running {name.EscapeMarkup()}…[/]", async _ =>
+                .StartAsync($"{Indent}[{ConsoleTheme.MutedTag}]Running {name.EscapeMarkup()}…[/]", async ctx =>
                 {
+                    // Wire context.StatusUpdate to update spinner text in real-time
+                    context.StatusUpdate = msg =>
+                    {
+                        ctx.Status($"{Indent}[{ConsoleTheme.MutedTag}]{msg.EscapeMarkup()}[/]");
+                    };
+
                     result = await work();
                 });
         }
         finally
         {
+            context.StatusUpdate = savedStatusUpdate;
             Interlocked.Exchange(ref _spinnerActive, 0);
         }
         return result;
+    }
+
+    /// <summary>
+    /// Renders a thinking/tool-use line for parallel steps (no spinner available).
+    /// Thread-safe — writes a single line with item label prefix.
+    /// </summary>
+    public void RenderThinking(string label, string message)
+    {
+        AnsiConsole.MarkupLine(
+            $"{Indent}    [{ConsoleTheme.SubtleTag}]\U0001F4AD {label.EscapeMarkup()}: {message.EscapeMarkup()}[/]");
     }
 
     public void RenderStepComplete(IPipelineStep step, StepResult result)
