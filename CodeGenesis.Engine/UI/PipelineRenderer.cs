@@ -111,9 +111,48 @@ public sealed class PipelineRenderer
 
         AnsiConsole.Write(new Rule().RuleStyle(new Style(ConsoleTheme.Error)));
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(
-            $"  [{ConsoleTheme.ErrorTag} bold]{ConsoleTheme.Cross} Pipeline Failed[/]  " +
-            $"[{ConsoleTheme.MutedTag}]{context.StepsCompleted} of {context.StepsCompleted + context.StepsFailed} steps completed[/]");
+
+        var table = new Table()
+            .Border(TableBorder.None)
+            .HideHeaders()
+            .AddColumn(new TableColumn("Key").PadRight(2))
+            .AddColumn(new TableColumn("Value"));
+
+        var duration = FormatDuration(context.TotalDuration);
+        var totalSteps = context.StepsCompleted + context.StepsFailed;
+
+        table.AddRow(
+            new Markup($"  [{ConsoleTheme.ErrorTag} bold]{ConsoleTheme.Cross} Pipeline Failed[/]"),
+            new Markup(""));
+        table.AddRow(
+            new Markup($"  [{ConsoleTheme.MutedTag}]Duration[/]"),
+            new Markup($"{duration}"));
+        table.AddRow(
+            new Markup($"  [{ConsoleTheme.MutedTag}]Steps[/]"),
+            new Markup($"[{ConsoleTheme.ErrorTag}]{context.StepsFailed} failed[/]" +
+                       (context.StepsCompleted > 0 ? $"  [{ConsoleTheme.MutedTag}]{context.StepsCompleted} completed[/]" : "")));
+
+        if (!string.IsNullOrWhiteSpace(context.FailedStepName))
+            table.AddRow(
+                new Markup($"  [{ConsoleTheme.MutedTag}]Failed at[/]"),
+                new Markup($"[bold]{context.FailedStepName.EscapeMarkup()}[/]"));
+
+        AnsiConsole.Write(table);
+
+        if (!string.IsNullOrWhiteSpace(context.FailureReason))
+        {
+            AnsiConsole.WriteLine();
+
+            var reasonPanel = new Panel(
+                    new Markup($"[{ConsoleTheme.ErrorTag}]{context.FailureReason.EscapeMarkup()}[/]"))
+                .Border(BoxBorder.Rounded)
+                .BorderStyle(new Style(ConsoleTheme.Error))
+                .Header($"[{ConsoleTheme.ErrorTag}] Reason [/]")
+                .Padding(1, 0);
+
+            AnsiConsole.Write(reasonPanel);
+        }
+
         AnsiConsole.WriteLine();
         AnsiConsole.Write(new Rule().RuleStyle(new Style(ConsoleTheme.Error)));
         AnsiConsole.WriteLine();
