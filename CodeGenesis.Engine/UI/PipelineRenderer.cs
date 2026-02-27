@@ -8,6 +8,10 @@ public sealed class PipelineRenderer
     // Shared spinner guard — only one Spectre.Console Status can run at a time
     private int _spinnerActive;
 
+    // Deferred banner — RenderBanner() requests it, RenderPipelineStart() renders the combined version
+    private bool _bannerPending;
+    private bool _bannerRendered;
+
     // AsyncLocal so each parallel task gets its own rendering state
     private readonly AsyncLocal<int> _depth = new();
     private readonly AsyncLocal<bool> _renderingSuppressed = new();
@@ -29,18 +33,36 @@ public sealed class PipelineRenderer
 
     // ── Banner ────────────────────────────────────────────────────────
 
+    private static readonly string BannerTitle =
+        $"[{ConsoleTheme.PrimaryTag} bold]{ConsoleTheme.Spark} CodeGenesis Engine[/]  " +
+        $"[{ConsoleTheme.SubtleTag}]v0.1.0[/]";
+
+    private static readonly string BannerTagline =
+        $"[{ConsoleTheme.MutedTag} italic]AI-powered pipeline orchestration[/]";
+
+    /// <summary>Defers the banner — it will be rendered by <see cref="RenderPipelineStart"/>
+    /// as a combined panel, or flushed standalone before errors.</summary>
     public void RenderBanner()
     {
-        AnsiConsole.WriteLine();
-        AnsiConsole.Write(new Rule().RuleStyle(new Style(ConsoleTheme.Subtle)));
+        _bannerPending = true;
+    }
 
-        var banner = new Markup(
-            $"  [{ConsoleTheme.PrimaryTag} bold]{ConsoleTheme.Spark} CodeGenesis Engine[/]  " +
-            $"[{ConsoleTheme.MutedTag}]v0.1.0[/]");
-        AnsiConsole.Write(banner);
+    /// <summary>Flushes the standalone banner if it hasn't been rendered yet (e.g. before an error).</summary>
+    private void EnsureBanner()
+    {
+        if (!_bannerPending || _bannerRendered) return;
+        _bannerPending = false;
+        _bannerRendered = true;
+
         AnsiConsole.WriteLine();
 
-        AnsiConsole.Write(new Rule().RuleStyle(new Style(ConsoleTheme.Subtle)));
+        var content = new Markup($"{BannerTitle}\n{BannerTagline}");
+        var panel = new Panel(content)
+            .Border(BoxBorder.Rounded)
+            .BorderStyle(new Style(ConsoleTheme.Subtle))
+            .Padding(2, 1);
+
+        AnsiConsole.Write(panel);
         AnsiConsole.WriteLine();
     }
 
@@ -51,17 +73,24 @@ public sealed class PipelineRenderer
         // Suppress nested pipeline headers (e.g. inside foreach/parallel iterations)
         if (_depth.Value > 0 || IsSuppressed) return;
 
-        AnsiConsole.MarkupLine(
-            $"  [{ConsoleTheme.MutedTag}]Task[/]    {context.TaskDescription.EscapeMarkup()}");
-        AnsiConsole.MarkupLine(
-            $"  [{ConsoleTheme.MutedTag}]Steps[/]   {totalSteps}");
-
-        if (context.WorkingDirectory is not null)
-            AnsiConsole.MarkupLine(
-                $"  [{ConsoleTheme.MutedTag}]Dir[/]     {context.WorkingDirectory.EscapeMarkup()}");
+        _bannerPending = false;
+        _bannerRendered = true;
 
         AnsiConsole.WriteLine();
-        AnsiConsole.Write(new Rule().RuleStyle(new Style(ConsoleTheme.Subtle)));
+
+        var lines = $"{BannerTitle}\n{BannerTagline}\n\n" +
+                    $"[{ConsoleTheme.MutedTag}]Task[/]    {context.TaskDescription.EscapeMarkup()}\n" +
+                    $"[{ConsoleTheme.MutedTag}]Steps[/]   {totalSteps}";
+
+        if (context.WorkingDirectory is not null)
+            lines += $"\n[{ConsoleTheme.MutedTag}]Dir[/]     {context.WorkingDirectory.EscapeMarkup()}";
+
+        var panel = new Panel(new Markup(lines))
+            .Border(BoxBorder.Rounded)
+            .BorderStyle(new Style(ConsoleTheme.Subtle))
+            .Padding(2, 1);
+
+        AnsiConsole.Write(panel);
         AnsiConsole.WriteLine();
     }
 
@@ -70,37 +99,24 @@ public sealed class PipelineRenderer
         // Suppress nested pipeline summaries
         if (_depth.Value > 0 || IsSuppressed) return;
 
-        AnsiConsole.Write(new Rule().RuleStyle(new Style(ConsoleTheme.Subtle)));
         AnsiConsole.WriteLine();
 
         var totalTokens = context.TotalInputTokens + context.TotalOutputTokens;
         var duration = FormatDuration(context.TotalDuration);
 
-        var table = new Table()
-            .Border(TableBorder.None)
-            .HideHeaders()
-            .AddColumn(new TableColumn("Key").PadRight(2))
-            .AddColumn(new TableColumn("Value"));
+        var content = new Markup(
+            $"[{ConsoleTheme.SuccessTag} bold]{ConsoleTheme.Check} Pipeline Complete[/]\n\n" +
+            $"[{ConsoleTheme.MutedTag}]Duration[/]  {duration}\n" +
+            $"[{ConsoleTheme.MutedTag}]Steps[/]     {context.StepsCompleted} completed\n" +
+            $"[{ConsoleTheme.MutedTag}]Tokens[/]    {totalTokens:N0} [{ConsoleTheme.SubtleTag}]({context.TotalInputTokens:N0} in / {context.TotalOutputTokens:N0} out)[/]\n" +
+            $"[{ConsoleTheme.MutedTag}]Cost[/]      ${context.TotalCostUsd:F4}");
 
-        table.AddRow(
-            new Markup($"  [{ConsoleTheme.SuccessTag} bold]{ConsoleTheme.Check} Pipeline Complete[/]"),
-            new Markup(""));
-        table.AddRow(
-            new Markup($"  [{ConsoleTheme.MutedTag}]Duration[/]"),
-            new Markup($"{duration}"));
-        table.AddRow(
-            new Markup($"  [{ConsoleTheme.MutedTag}]Steps[/]"),
-            new Markup($"{context.StepsCompleted} completed"));
-        table.AddRow(
-            new Markup($"  [{ConsoleTheme.MutedTag}]Tokens[/]"),
-            new Markup($"{totalTokens:N0} ({context.TotalInputTokens:N0} in / {context.TotalOutputTokens:N0} out)"));
-        table.AddRow(
-            new Markup($"  [{ConsoleTheme.MutedTag}]Cost[/]"),
-            new Markup($"${context.TotalCostUsd:F4}"));
+        var panel = new Panel(content)
+            .Border(BoxBorder.Rounded)
+            .BorderStyle(new Style(ConsoleTheme.Success))
+            .Padding(2, 1);
 
-        AnsiConsole.Write(table);
-        AnsiConsole.WriteLine();
-        AnsiConsole.Write(new Rule().RuleStyle(new Style(ConsoleTheme.Subtle)));
+        AnsiConsole.Write(panel);
         AnsiConsole.WriteLine();
     }
 
@@ -109,52 +125,29 @@ public sealed class PipelineRenderer
         // Suppress nested pipeline failure banners
         if (_depth.Value > 0 || IsSuppressed) return;
 
-        AnsiConsole.Write(new Rule().RuleStyle(new Style(ConsoleTheme.Error)));
         AnsiConsole.WriteLine();
-
-        var table = new Table()
-            .Border(TableBorder.None)
-            .HideHeaders()
-            .AddColumn(new TableColumn("Key").PadRight(2))
-            .AddColumn(new TableColumn("Value"));
 
         var duration = FormatDuration(context.TotalDuration);
-        var totalSteps = context.StepsCompleted + context.StepsFailed;
 
-        table.AddRow(
-            new Markup($"  [{ConsoleTheme.ErrorTag} bold]{ConsoleTheme.Cross} Pipeline Failed[/]"),
-            new Markup(""));
-        table.AddRow(
-            new Markup($"  [{ConsoleTheme.MutedTag}]Duration[/]"),
-            new Markup($"{duration}"));
-        table.AddRow(
-            new Markup($"  [{ConsoleTheme.MutedTag}]Steps[/]"),
-            new Markup($"[{ConsoleTheme.ErrorTag}]{context.StepsFailed} failed[/]" +
-                       (context.StepsCompleted > 0 ? $"  [{ConsoleTheme.MutedTag}]{context.StepsCompleted} completed[/]" : "")));
+        var stepsInfo = $"[{ConsoleTheme.ErrorTag}]{context.StepsFailed} failed[/]" +
+                        (context.StepsCompleted > 0 ? $"  [{ConsoleTheme.MutedTag}]{context.StepsCompleted} completed[/]" : "");
+
+        var lines = $"[{ConsoleTheme.ErrorTag} bold]{ConsoleTheme.Cross} Pipeline Failed[/]\n\n" +
+                    $"[{ConsoleTheme.MutedTag}]Duration[/]    {duration}\n" +
+                    $"[{ConsoleTheme.MutedTag}]Steps[/]       {stepsInfo}";
 
         if (!string.IsNullOrWhiteSpace(context.FailedStepName))
-            table.AddRow(
-                new Markup($"  [{ConsoleTheme.MutedTag}]Failed at[/]"),
-                new Markup($"[bold]{context.FailedStepName.EscapeMarkup()}[/]"));
-
-        AnsiConsole.Write(table);
+            lines += $"\n[{ConsoleTheme.MutedTag}]Failed at[/]  [bold]{context.FailedStepName.EscapeMarkup()}[/]";
 
         if (!string.IsNullOrWhiteSpace(context.FailureReason))
-        {
-            AnsiConsole.WriteLine();
+            lines += $"\n\n[{ConsoleTheme.ErrorTag}]{context.FailureReason.EscapeMarkup()}[/]";
 
-            var reasonPanel = new Panel(
-                    new Markup($"[{ConsoleTheme.ErrorTag}]{context.FailureReason.EscapeMarkup()}[/]"))
-                .Border(BoxBorder.Rounded)
-                .BorderStyle(new Style(ConsoleTheme.Error))
-                .Header($"[{ConsoleTheme.ErrorTag}] Reason [/]")
-                .Padding(1, 0);
+        var panel = new Panel(new Markup(lines))
+            .Border(BoxBorder.Rounded)
+            .BorderStyle(new Style(ConsoleTheme.Error))
+            .Padding(2, 1);
 
-            AnsiConsole.Write(reasonPanel);
-        }
-
-        AnsiConsole.WriteLine();
-        AnsiConsole.Write(new Rule().RuleStyle(new Style(ConsoleTheme.Error)));
+        AnsiConsole.Write(panel);
         AnsiConsole.WriteLine();
     }
 
@@ -423,11 +416,13 @@ public sealed class PipelineRenderer
 
     public void RenderError(string message)
     {
+        EnsureBanner();
         AnsiConsole.MarkupLine($"  [{ConsoleTheme.ErrorTag}]{ConsoleTheme.Cross} {message.EscapeMarkup()}[/]");
     }
 
     public void RenderInfo(string message)
     {
+        EnsureBanner();
         AnsiConsole.MarkupLine($"  [{ConsoleTheme.MutedTag}]{message.EscapeMarkup()}[/]");
     }
 
