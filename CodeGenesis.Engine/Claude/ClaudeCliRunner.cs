@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -52,9 +53,19 @@ public sealed class ClaudeCliRunner(
             process.StandardInput.Close();
         }
 
-        // Read stdout and stderr concurrently to avoid deadlocks
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
+        // Read stderr concurrently to avoid deadlocks
         var stderrTask = process.StandardError.ReadToEndAsync(ct);
+
+        // Read stdout line-by-line, parsing stream-json events
+        string? resultJson = null;
+        try
+        {
+            resultJson = await ReadStreamEventsAsync(process.StandardOutput, request.OnProgress, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Propagate cancellation after cleanup
+        }
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
@@ -73,7 +84,6 @@ public sealed class ClaudeCliRunner(
                 sw.Elapsed);
         }
 
-        var stdout = await stdoutTask;
         var stderr = await stderrTask;
         sw.Stop();
 
@@ -83,8 +93,8 @@ public sealed class ClaudeCliRunner(
         if (!string.IsNullOrWhiteSpace(stderr))
             logger.LogDebug("Claude stderr:\n{Stderr}", stderr);
 
-        if (!string.IsNullOrWhiteSpace(stdout))
-            logger.LogDebug("Claude stdout:\n{Stdout}", stdout);
+        if (!string.IsNullOrWhiteSpace(resultJson))
+            logger.LogDebug("Claude result json:\n{Json}", resultJson);
 
         if (process.ExitCode != 0)
         {
@@ -92,13 +102,155 @@ public sealed class ClaudeCliRunner(
             return ClaudeResponse.Failure(stderr.Trim(), process.ExitCode, sw.Elapsed);
         }
 
-        return ClaudeResponse.FromJson(stdout, sw.Elapsed);
+        if (resultJson is null)
+        {
+            logger.LogError("Claude produced no result event in stream output");
+            return ClaudeResponse.Failure("No result event in stream output", process.ExitCode, sw.Elapsed);
+        }
+
+        return ClaudeResponse.FromJson(resultJson, sw.Elapsed);
+    }
+
+    /// <summary>
+    /// Reads stdout line-by-line, parsing stream-json events.
+    /// Fires progress callbacks for thinking and tool_use events.
+    /// Returns the final "result" JSON line.
+    /// </summary>
+    private async Task<string?> ReadStreamEventsAsync(
+        System.IO.StreamReader stdout,
+        Action<ClaudeProgressEvent>? onProgress,
+        CancellationToken ct)
+    {
+        string? resultJson = null;
+
+        while (!ct.IsCancellationRequested)
+        {
+            var line = await stdout.ReadLineAsync(ct);
+            if (line is null) break; // EOF
+            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(line);
+                var root = doc.RootElement;
+
+                if (!root.TryGetProperty("type", out var typeProp))
+                    continue;
+
+                var type = typeProp.GetString();
+
+                if (type == "result")
+                {
+                    resultJson = line;
+                    continue;
+                }
+
+                if (type == "assistant")
+                {
+                    ProcessAssistantEvent(root, onProgress);
+                }
+            }
+            catch (JsonException)
+            {
+                // Skip malformed lines silently
+                logger.LogTrace("Skipping non-JSON stream line: {Line}", line);
+            }
+        }
+
+        return resultJson;
+    }
+
+    /// <summary>
+    /// Extracts thinking and tool_use content from an assistant event, logs it, and fires progress callbacks.
+    /// </summary>
+    private void ProcessAssistantEvent(JsonElement root, Action<ClaudeProgressEvent>? onProgress)
+    {
+        if (!root.TryGetProperty("message", out var message))
+            return;
+        if (!message.TryGetProperty("content", out var content))
+            return;
+        if (content.ValueKind != JsonValueKind.Array)
+            return;
+
+        foreach (var item in content.EnumerateArray())
+        {
+            if (!item.TryGetProperty("type", out var itemType))
+                continue;
+
+            var itemTypeStr = itemType.GetString();
+
+            if (itemTypeStr == "thinking")
+            {
+                var thinking = item.TryGetProperty("thinking", out var t) ? t.GetString() : null;
+                if (!string.IsNullOrWhiteSpace(thinking))
+                {
+                    var summary = TruncateThinking(thinking!);
+                    logger.LogDebug("Claude thinking: {Summary}", summary);
+                    onProgress?.Invoke(new ClaudeProgressEvent(ClaudeProgressType.Thinking, summary));
+                }
+            }
+            else if (itemTypeStr == "tool_use")
+            {
+                var toolName = item.TryGetProperty("name", out var n) ? n.GetString() : null;
+                if (toolName is not null)
+                {
+                    var summary = SummarizeToolUse(toolName, item);
+                    logger.LogDebug("Claude tool_use: {Summary}", summary);
+                    onProgress?.Invoke(new ClaudeProgressEvent(ClaudeProgressType.ToolUse, summary));
+                }
+            }
+        }
+    }
+
+    /// <summary>Truncates thinking text to ~100 chars at the first sentence boundary.</summary>
+    private static string TruncateThinking(string thinking)
+    {
+        // Clean up whitespace
+        var clean = thinking.ReplaceLineEndings(" ").Trim();
+        if (clean.Length <= 100) return clean;
+
+        // Try to break at first sentence boundary within 100 chars
+        var cutoff = clean.AsSpan(0, 100);
+        var sentenceEnd = cutoff.LastIndexOfAny('.', '!', '?');
+        if (sentenceEnd > 20)
+            return clean[..(sentenceEnd + 1)];
+
+        // Fall back to word boundary
+        var spaceIdx = cutoff.LastIndexOf(' ');
+        if (spaceIdx > 20)
+            return string.Concat(clean.AsSpan(0, spaceIdx), "\u2026");
+
+        return string.Concat(clean.AsSpan(0, 100), "\u2026");
+    }
+
+    /// <summary>Extracts a concise summary from a tool_use event (e.g. "Read: src/main.ts").</summary>
+    private static string SummarizeToolUse(string toolName, JsonElement item)
+    {
+        if (!item.TryGetProperty("input", out var input) || input.ValueKind != JsonValueKind.Object)
+            return toolName;
+
+        // Common tool patterns: extract the most useful argument
+        if (input.TryGetProperty("file_path", out var filePath))
+            return $"{toolName}: {filePath.GetString()}";
+        if (input.TryGetProperty("path", out var path))
+            return $"{toolName}: {path.GetString()}";
+        if (input.TryGetProperty("command", out var command))
+        {
+            var cmd = command.GetString() ?? "";
+            return $"{toolName}: {(cmd.Length > 60 ? string.Concat(cmd.AsSpan(0, 60), "\u2026") : cmd)}";
+        }
+        if (input.TryGetProperty("pattern", out var pattern))
+            return $"{toolName}: {pattern.GetString()}";
+        if (input.TryGetProperty("query", out var query))
+            return $"{toolName}: {query.GetString()}";
+
+        return toolName;
     }
 
     private string BuildArguments(ClaudeRequest request)
     {
         var sb = new StringBuilder();
-        sb.Append("--print --output-format json");
+        sb.Append("--print --verbose --output-format stream-json");
 
         var model = request.Model ?? _options.DefaultModel;
         if (model is not null)

@@ -50,7 +50,8 @@ public sealed class ParallelStep(
                     var branchContext = new PipelineContext
                     {
                         TaskDescription = branch.Name,
-                        WorkingDirectory = context.WorkingDirectory
+                        WorkingDirectory = context.WorkingDirectory,
+                        StatusUpdate = msg => renderer.RenderThinking(branch.Name, msg)
                     };
 
                     // Copy parent step outputs for reads

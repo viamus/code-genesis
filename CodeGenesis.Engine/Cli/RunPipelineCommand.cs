@@ -75,7 +75,7 @@ public sealed class RunPipelineCommand(
         List<IPipelineStep> steps;
         try
         {
-            var builder = new StepBuilder(claude, executor, renderer, pipelineDir, globalModel, variables);
+            var builder = new StepBuilder(claude, executor, renderer, pipelineDir, globalModel, config.Settings, variables);
             steps = builder.BuildAll(config.Steps);
         }
         catch (Exception ex)

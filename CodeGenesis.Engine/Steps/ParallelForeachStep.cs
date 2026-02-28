@@ -91,7 +91,8 @@ public sealed class ParallelForeachStep(
                     var iterationContext = new PipelineContext
                     {
                         TaskDescription = context.TaskDescription,
-                        WorkingDirectory = context.WorkingDirectory
+                        WorkingDirectory = context.WorkingDirectory,
+                        StatusUpdate = msg => renderer.RenderThinking(item, msg)
                     };
 
                     // Copy parent step outputs so sub-steps can read them

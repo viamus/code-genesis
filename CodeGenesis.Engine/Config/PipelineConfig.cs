@@ -45,6 +45,18 @@ public sealed class PipelineSettings
 
     [YamlMember(Alias = "working_directory")]
     public string? WorkingDirectory { get; set; }
+
+    [YamlMember(Alias = "retry_max")]
+    public int? RetryMax { get; set; }
+
+    [YamlMember(Alias = "retry_backoff_seconds")]
+    public int? RetryBackoffSeconds { get; set; }
+
+    [YamlMember(Alias = "rate_limit_pause_seconds")]
+    public int? RateLimitPauseSeconds { get; set; }
+
+    [YamlMember(Alias = "rate_limit_max_pauses")]
+    public int? RateLimitMaxPauses { get; set; }
 }
 
 public sealed class PipelineInput
@@ -96,6 +108,18 @@ public sealed class StepConfig
 
     [YamlMember(Alias = "fail_message")]
     public string? FailMessage { get; set; }
+
+    [YamlMember(Alias = "retry_max")]
+    public int? RetryMax { get; set; }
+
+    [YamlMember(Alias = "retry_backoff_seconds")]
+    public int? RetryBackoffSeconds { get; set; }
+
+    [YamlMember(Alias = "rate_limit_pause_seconds")]
+    public int? RateLimitPauseSeconds { get; set; }
+
+    [YamlMember(Alias = "rate_limit_max_pauses")]
+    public int? RateLimitMaxPauses { get; set; }
 }
 
 public sealed class PipelineOutput
@@ -153,6 +177,18 @@ public sealed class StepEntry
     [YamlMember(Alias = "fail_message")]
     public string? FailMessage { get; set; }
 
+    [YamlMember(Alias = "retry_max")]
+    public int? RetryMax { get; set; }
+
+    [YamlMember(Alias = "retry_backoff_seconds")]
+    public int? RetryBackoffSeconds { get; set; }
+
+    [YamlMember(Alias = "rate_limit_pause_seconds")]
+    public int? RateLimitPauseSeconds { get; set; }
+
+    [YamlMember(Alias = "rate_limit_max_pauses")]
+    public int? RateLimitMaxPauses { get; set; }
+
     // --- Composite step fields ---
     [YamlMember(Alias = "foreach")]
     public ForeachConfig? Foreach { get; set; }
@@ -188,7 +224,11 @@ public sealed class StepEntry
         AllowedTools = AllowedTools,
         Optional = Optional,
         FailIf = FailIf,
-        FailMessage = FailMessage
+        FailMessage = FailMessage,
+        RetryMax = RetryMax,
+        RetryBackoffSeconds = RetryBackoffSeconds,
+        RateLimitPauseSeconds = RateLimitPauseSeconds,
+        RateLimitMaxPauses = RateLimitMaxPauses
     };
 }
 

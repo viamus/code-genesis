@@ -19,4 +19,7 @@ public sealed record ClaudeRequest
 
     /// <summary>Restrict which tools Claude can use.</summary>
     public List<string> AllowedTools { get; init; } = [];
+
+    /// <summary>Callback invoked with progress events (thinking, tool use) during streaming.</summary>
+    public Action<ClaudeProgressEvent>? OnProgress { get; init; }
 }

@@ -3,6 +3,8 @@ using System.Text.Json.Serialization;
 
 namespace CodeGenesis.Engine.Claude;
 
+public enum ClaudeFailureKind { None, Timeout, RateLimit, MaxTurns, Other }
+
 public sealed class ClaudeResponse
 {
     public bool Success { get; init; }
@@ -14,6 +16,28 @@ public sealed class ClaudeResponse
     public int OutputTokens { get; init; }
     public double? CostUsd { get; init; }
     public TimeSpan Duration { get; init; }
+
+    public ClaudeFailureKind FailureKind
+    {
+        get
+        {
+            if (Success) return ClaudeFailureKind.None;
+
+            var msg = (ErrorMessage ?? "").ToLowerInvariant();
+
+            if (ExitCode == -1 && msg.Contains("timed out"))
+                return ClaudeFailureKind.Timeout;
+
+            if (msg.Contains("rate limit") || msg.Contains("429")
+                || msg.Contains("overloaded") || msg.Contains("too many requests"))
+                return ClaudeFailureKind.RateLimit;
+
+            if (msg.Contains("max_turns"))
+                return ClaudeFailureKind.MaxTurns;
+
+            return ClaudeFailureKind.Other;
+        }
+    }
 
     public static ClaudeResponse FromJson(string json, TimeSpan duration)
     {
