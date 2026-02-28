@@ -62,6 +62,27 @@ steps:
 
 > Use `{{variable}}` for inputs and `{{steps.<key>}}` for outputs from previous steps.
 
+### MCP Server Tools
+
+Add `description` and `parameters` to MCP servers so the LLM knows when and how to use each tool:
+
+```yaml
+settings:
+  mcp_servers:
+    jira:
+      command: "npx"
+      args: ["-y", "@anthropic/mcp-jira"]
+      description: "Search and manage Jira tickets"
+      parameters:
+        project_key:
+          description: "The Jira project key"
+          example: "PROJ-123"
+      env:
+        JIRA_TOKEN: "{{jira_token}}"
+```
+
+> Descriptions and parameters are injected into the system prompt — they are not sent to the Claude CLI config.
+
 ## Documentation
 
 Full documentation is available in the **[Wiki](https://github.com/viamus/code-genesis/wiki)**:

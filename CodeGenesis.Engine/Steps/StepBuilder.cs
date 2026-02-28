@@ -73,6 +73,18 @@ public sealed class StepBuilder(
             ? PipelineConfigLoader.ResolveTemplate(stepConfig.SystemPrompt, variables)
             : null;
 
+        // Append MCP tool documentation to system prompt when available
+        if (mergedMcpServers is { Count: > 0 })
+        {
+            var mcpSection = McpContextBuilder.Build(mergedMcpServers);
+            if (mcpSection is not null)
+            {
+                resolvedSystemPrompt = resolvedSystemPrompt is not null
+                    ? resolvedSystemPrompt + "\n\n" + mcpSection
+                    : mcpSection;
+            }
+        }
+
         var retryPolicy = RetryPolicy.Resolve(stepConfig, globalSettings);
         return new DynamicStep(claude, stepConfig, resolvedPrompt, resolvedSystemPrompt, stepModel, mergedMcpServers, retryPolicy);
     }

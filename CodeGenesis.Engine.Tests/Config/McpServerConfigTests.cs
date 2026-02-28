@@ -92,4 +92,82 @@ public class McpServerConfigTests
         resolved.Args.Should().Equal("-y", "@modelcontextprotocol/server");
         resolved.Env["NODE_ENV"].Should().Be("production");
     }
+
+    [Fact]
+    public void ResolveTemplates_ResolvesDescription()
+    {
+        var config = new McpServerConfig
+        {
+            Command = "npx",
+            Description = "Access {{system_name}} tickets"
+        };
+
+        var resolved = config.ResolveTemplates(s => s.Replace("{{system_name}}", "Jira"));
+
+        resolved.Description.Should().Be("Access Jira tickets");
+    }
+
+    [Fact]
+    public void ResolveTemplates_ResolvesParameterDescriptionAndExample()
+    {
+        var config = new McpServerConfig
+        {
+            Command = "npx",
+            Parameters = new Dictionary<string, McpParameterConfig>
+            {
+                ["project_key"] = new()
+                {
+                    Description = "The {{board}} project key",
+                    Example = "{{default_project}}-123"
+                }
+            }
+        };
+
+        var resolved = config.ResolveTemplates(s => s
+            .Replace("{{board}}", "Jira")
+            .Replace("{{default_project}}", "PROJ"));
+
+        resolved.Parameters!["project_key"].Description.Should().Be("The Jira project key");
+        resolved.Parameters["project_key"].Example.Should().Be("PROJ-123");
+    }
+
+    [Fact]
+    public void ResolveTemplates_NullDescription_RemainsNull()
+    {
+        var config = new McpServerConfig { Command = "npx", Description = null };
+
+        var resolved = config.ResolveTemplates(s => s);
+
+        resolved.Description.Should().BeNull();
+    }
+
+    [Fact]
+    public void ResolveTemplates_NullParameters_RemainsNull()
+    {
+        var config = new McpServerConfig { Command = "npx", Parameters = null };
+
+        var resolved = config.ResolveTemplates(s => s);
+
+        resolved.Parameters.Should().BeNull();
+    }
+
+    [Fact]
+    public void ResolveTemplates_DoesNotMutateOriginalDescriptionOrParameters()
+    {
+        var config = new McpServerConfig
+        {
+            Command = "npx",
+            Description = "{{service}}",
+            Parameters = new Dictionary<string, McpParameterConfig>
+            {
+                ["key"] = new() { Description = "{{desc}}", Example = "{{ex}}" }
+            }
+        };
+
+        config.ResolveTemplates(s => "resolved");
+
+        config.Description.Should().Be("{{service}}");
+        config.Parameters["key"].Description.Should().Be("{{desc}}");
+        config.Parameters["key"].Example.Should().Be("{{ex}}");
+    }
 }
