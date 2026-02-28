@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using CodeGenesis.Engine.Config;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -10,12 +12,26 @@ public sealed class ClaudeCliRunner(
     IOptions<ClaudeCliOptions> options,
     ILogger<ClaudeCliRunner> logger) : IClaudeRunner
 {
+    private static readonly JsonSerializerOptions McpJsonOptions = new()
+    {
+        WriteIndented = false,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     private readonly ClaudeCliOptions _options = options.Value;
 
     public async Task<ClaudeResponse> RunAsync(ClaudeRequest request, CancellationToken ct = default)
     {
-        var args = BuildArguments(request);
+        string? mcpConfigPath = null;
+        try
+        {
+        mcpConfigPath = WriteMcpConfigFile(request.McpServers);
+
+        var args = BuildArguments(request, mcpConfigPath);
         logger.LogDebug("Launching: {CliPath} {Args}", _options.CliPath, args);
+
+        if (mcpConfigPath is not null)
+            logger.LogDebug("MCP config written to: {Path}", mcpConfigPath);
 
         using var process = new Process();
         process.StartInfo = new ProcessStartInfo
@@ -109,6 +125,15 @@ public sealed class ClaudeCliRunner(
         }
 
         return ClaudeResponse.FromJson(resultJson, sw.Elapsed);
+        }
+        finally
+        {
+            if (mcpConfigPath is not null)
+            {
+                try { File.Delete(mcpConfigPath); }
+                catch { /* best-effort cleanup */ }
+            }
+        }
     }
 
     /// <summary>
@@ -247,7 +272,7 @@ public sealed class ClaudeCliRunner(
         return toolName;
     }
 
-    private string BuildArguments(ClaudeRequest request)
+    private string BuildArguments(ClaudeRequest request, string? mcpConfigPath = null)
     {
         var sb = new StringBuilder();
         sb.Append("--print --verbose --output-format stream-json");
@@ -266,7 +291,38 @@ public sealed class ClaudeCliRunner(
         foreach (var tool in request.AllowedTools)
             sb.Append($" --allowedTools \"{Escape(tool)}\"");
 
+        if (mcpConfigPath is not null)
+            sb.Append($" --mcp-config \"{Escape(mcpConfigPath)}\"");
+
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Writes MCP server configuration to a temporary JSON file in the format
+    /// expected by Claude CLI's --mcp-config flag.
+    /// Returns the file path, or null if no MCP servers are configured.
+    /// </summary>
+    private static string? WriteMcpConfigFile(Dictionary<string, McpServerConfig>? mcpServers)
+    {
+        if (mcpServers is null || mcpServers.Count == 0)
+            return null;
+
+        var configObj = new Dictionary<string, object>
+        {
+            ["mcpServers"] = mcpServers.ToDictionary(
+                kv => kv.Key,
+                kv => (object)new
+                {
+                    command = kv.Value.Command,
+                    args = kv.Value.Args,
+                    env = kv.Value.Env.Count > 0 ? kv.Value.Env : null
+                })
+        };
+
+        var json = JsonSerializer.Serialize(configObj, McpJsonOptions);
+        var tempPath = Path.Combine(Path.GetTempPath(), $"codegenesis-mcp-{Guid.NewGuid():N}.json");
+        File.WriteAllText(tempPath, json);
+        return tempPath;
     }
 
     private static string Escape(string value)

@@ -18,4 +18,7 @@ public sealed class AgentDefinition
 
     [YamlMember(Alias = "allowed_tools")]
     public List<string>? AllowedTools { get; set; }
+
+    [YamlMember(Alias = "mcp_servers")]
+    public Dictionary<string, McpServerConfig>? McpServers { get; set; }
 }
