@@ -1,5 +1,7 @@
 # CodeGenesis
 
+[![CI](https://github.com/viamus/code-genesis/actions/workflows/ci.yml/badge.svg)](https://github.com/viamus/code-genesis/actions/workflows/ci.yml)
+
 A .NET CLI engine that orchestrates multi-step AI pipelines using [Claude Code](https://docs.anthropic.com/en/docs/claude-code) as the execution backend. Define pipelines in YAML, compose agents with Markdown context bundles, and let Claude handle planning, execution, and validation.
 
 ## Prerequisites
