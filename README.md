@@ -18,7 +18,7 @@ Define pipelines in YAML · Compose agents with Markdown bundles · Let Claude h
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (preview)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code/getting-started) installed and authenticated (`npm install -g @anthropic-ai/claude-code`)
 
 ## Quick Start
