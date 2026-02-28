@@ -295,5 +295,47 @@ public class PipelineConfigLoaderTests
         }
     }
 
+    [Fact]
+    public void LoadFromFile_McpServerWithDescriptionAndParameters_ParsesCorrectly()
+    {
+        var yaml = """
+            pipeline:
+              name: MCP Test
+            settings:
+              mcp_servers:
+                jira:
+                  command: npx
+                  args: ["-y", "@anthropic/mcp-jira"]
+                  description: "Search and manage Jira tickets"
+                  parameters:
+                    project_key:
+                      description: "The Jira project key"
+                      example: "PROJ-123"
+                  env:
+                    JIRA_TOKEN: "secret"
+            steps:
+              - name: step1
+                prompt: Do something
+            """;
+
+        var path = Path.Combine(Path.GetTempPath(), $"test-{Guid.NewGuid()}.yaml");
+        File.WriteAllText(path, yaml);
+        try
+        {
+            var config = PipelineConfigLoader.LoadFromFile(path);
+
+            var jira = config.Settings.McpServers!["jira"];
+            jira.Command.Should().Be("npx");
+            jira.Description.Should().Be("Search and manage Jira tickets");
+            jira.Parameters.Should().ContainKey("project_key");
+            jira.Parameters!["project_key"].Description.Should().Be("The Jira project key");
+            jira.Parameters["project_key"].Example.Should().Be("PROJ-123");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     #endregion
 }
