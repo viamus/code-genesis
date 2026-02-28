@@ -315,6 +315,90 @@ steps:
 
 See [`examples/approval.yml`](examples/approval.yml) for a complete working example.
 
+### MCP Servers (Custom Tools)
+
+Steps can declare [MCP](https://modelcontextprotocol.io/) stdio servers — Python scripts, .NET executables, or any process that speaks the MCP stdio protocol — to add **custom tools on demand**. Claude will see these tools alongside its built-in tools (Read, Write, Bash, etc.) and can call them during execution.
+
+#### Step-level MCP servers
+
+```yaml
+steps:
+  - name: "Analyze codebase"
+    prompt: "Use the analyzer tool to check for issues"
+    mcp_servers:
+      analyzer:
+        command: "python"
+        args: ["tools/analyzer_server.py"]
+        env:
+          MODE: "strict"
+    allowed_tools:
+      - "mcp__analyzer__run_analysis"
+```
+
+#### Global MCP servers
+
+Define servers in `settings` to make them available to **all** steps:
+
+```yaml
+settings:
+  model: "claude-sonnet-4-6"
+  mcp_servers:
+    shared-db:
+      command: "python"
+      args: ["tools/db_server.py"]
+      env:
+        DB_HOST: "{{db_host}}"
+
+steps:
+  - name: "Query data"
+    prompt: "Use the database tool to fetch user stats"
+    allowed_tools:
+      - "mcp__shared-db__query"
+```
+
+#### MCP servers in context bundles
+
+Agent definitions (YAML) can also declare MCP servers, so a reusable agent bundle can bring its own tools:
+
+```yaml
+# contexts/data-analyst/agent.yml
+system_prompt: "You are a data analyst with access to the database."
+allowed_tools:
+  - "mcp__db__query"
+  - "mcp__db__schema"
+mcp_servers:
+  db:
+    command: "dotnet"
+    args: ["run", "--project", "tools/DbServer"]
+```
+
+#### Merge order
+
+When multiple levels define MCP servers, they are merged with **later sources winning** on name collision:
+
+1. **Global** (`settings.mcp_servers`) — base layer
+2. **Context bundle** (`agent.yml`) — overrides global
+3. **Step-level** (`steps[].mcp_servers`) — overrides both
+
+#### Configuration fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `command` | Yes | Executable to run (e.g. `"python"`, `"dotnet"`, `"node"`) |
+| `args` | No | Command-line arguments passed to the executable |
+| `env` | No | Environment variables set for the MCP server process |
+
+All fields support template variables (`{{variable}}`), resolved from pipeline inputs at build time.
+
+#### How it works
+
+1. CodeGenesis writes the MCP server config to a temporary JSON file
+2. Passes `--mcp-config <path>` to the Claude CLI process
+3. Claude CLI starts the MCP server(s), making their tools available during the step
+4. When the step finishes, the MCP server(s) are terminated and the temp file is cleaned up
+
+Each step invocation gets its own temp file (GUID-based naming), so parallel steps are fully thread-safe.
+
 ### Understanding `max_turns`
 
 A **turn** is one complete round-trip between CodeGenesis and Claude: the engine sends a prompt, Claude reasons about it, optionally calls tools (Read, Write, Edit, Bash, etc.), and returns a response. Complex tasks often require multiple turns — for example, Claude might read a file in turn 1, edit it in turn 2, and run tests in turn 3.
@@ -461,6 +545,7 @@ code-genesis-github/
       PipelineConfigLoader.cs        # YAML loader + template resolver
       ContextBundleLoader.cs         # Loads context bundles from directories
       AgentDefinition.cs             # Agent config model
+      McpServerConfig.cs             # MCP stdio server config model
       MarkdownFrontmatterParser.cs   # Parses YAML frontmatter from .md files
     Pipeline/
       PipelineExecutor.cs            # Runs steps sequentially (implements IStepExecutor)

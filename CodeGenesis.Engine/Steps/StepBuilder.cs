@@ -53,13 +53,28 @@ public sealed class StepBuilder(
 
         var stepModel = stepConfig.Model ?? bundle?.Model ?? globalModel;
 
+        // Merge MCP servers: global → bundle → step (later wins on key collision)
+        var mergedMcpServers = MergeMcpServers(
+            globalSettings?.McpServers,
+            bundle?.McpServers,
+            stepConfig.McpServers);
+
+        // Resolve templates in MCP server args/env values
+        if (mergedMcpServers is not null)
+        {
+            mergedMcpServers = mergedMcpServers.ToDictionary(
+                kv => kv.Key,
+                kv => kv.Value.ResolveTemplates(
+                    val => PipelineConfigLoader.ResolveTemplate(val, variables)));
+        }
+
         var resolvedPrompt = PipelineConfigLoader.ResolveTemplate(stepConfig.Prompt, variables);
         var resolvedSystemPrompt = stepConfig.SystemPrompt is not null
             ? PipelineConfigLoader.ResolveTemplate(stepConfig.SystemPrompt, variables)
             : null;
 
         var retryPolicy = RetryPolicy.Resolve(stepConfig, globalSettings);
-        return new DynamicStep(claude, stepConfig, resolvedPrompt, resolvedSystemPrompt, stepModel, retryPolicy);
+        return new DynamicStep(claude, stepConfig, resolvedPrompt, resolvedSystemPrompt, stepModel, mergedMcpServers, retryPolicy);
     }
 
     private ForeachStep BuildForeach(ForeachConfig config)
@@ -89,6 +104,28 @@ public sealed class StepBuilder(
         return new ParallelStep(
             config, branches, executor, renderer,
             PipelineConfigLoader.ResolveTemplate, variables);
+    }
+
+    /// <summary>
+    /// Merges MCP server dictionaries with later sources overriding earlier ones by key.
+    /// Returns null if all sources are null/empty.
+    /// </summary>
+    private static Dictionary<string, McpServerConfig>? MergeMcpServers(
+        params Dictionary<string, McpServerConfig>?[] sources)
+    {
+        Dictionary<string, McpServerConfig>? merged = null;
+
+        foreach (var source in sources)
+        {
+            if (source is null || source.Count == 0)
+                continue;
+
+            merged ??= new Dictionary<string, McpServerConfig>();
+            foreach (var (key, value) in source)
+                merged[key] = value;
+        }
+
+        return merged;
     }
 
     private static void ApplyBundle(StepConfig stepConfig, AgentDefinition bundle)

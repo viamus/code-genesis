@@ -57,6 +57,9 @@ public sealed class PipelineSettings
 
     [YamlMember(Alias = "rate_limit_max_pauses")]
     public int? RateLimitMaxPauses { get; set; }
+
+    [YamlMember(Alias = "mcp_servers")]
+    public Dictionary<string, McpServerConfig>? McpServers { get; set; }
 }
 
 public sealed class PipelineInput
@@ -99,6 +102,9 @@ public sealed class StepConfig
 
     [YamlMember(Alias = "allowed_tools")]
     public List<string>? AllowedTools { get; set; }
+
+    [YamlMember(Alias = "mcp_servers")]
+    public Dictionary<string, McpServerConfig>? McpServers { get; set; }
 
     [YamlMember(Alias = "optional")]
     public bool Optional { get; set; }
@@ -168,6 +174,9 @@ public sealed class StepEntry
     [YamlMember(Alias = "allowed_tools")]
     public List<string>? AllowedTools { get; set; }
 
+    [YamlMember(Alias = "mcp_servers")]
+    public Dictionary<string, McpServerConfig>? McpServers { get; set; }
+
     [YamlMember(Alias = "optional")]
     public bool Optional { get; set; }
 
@@ -222,6 +231,7 @@ public sealed class StepEntry
         MaxTurns = MaxTurns,
         OutputKey = OutputKey,
         AllowedTools = AllowedTools,
+        McpServers = McpServers,
         Optional = Optional,
         FailIf = FailIf,
         FailMessage = FailMessage,

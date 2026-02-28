@@ -10,6 +10,7 @@ public sealed class DynamicStep(
     string resolvedPrompt,
     string? resolvedSystemPrompt,
     string? model,
+    Dictionary<string, McpServerConfig>? mcpServers = null,
     RetryPolicy? retryPolicy = null) : IPipelineStep
 {
     private string _resolvedPrompt = resolvedPrompt;
@@ -24,7 +25,7 @@ public sealed class DynamicStep(
     public void UpdateResolvedSystemPrompt(string? systemPrompt) => _resolvedSystemPrompt = systemPrompt;
 
     /// <summary>Creates a shallow clone with its own mutable prompt state, safe for parallel execution.</summary>
-    public DynamicStep Clone() => new(claude, stepConfig, _resolvedPrompt, _resolvedSystemPrompt, model, retryPolicy);
+    public DynamicStep Clone() => new(claude, stepConfig, _resolvedPrompt, _resolvedSystemPrompt, model, mcpServers, retryPolicy);
 
     public async Task<StepResult> ExecuteAsync(PipelineContext context, CancellationToken ct)
     {
@@ -50,6 +51,7 @@ public sealed class DynamicStep(
                 MaxTurns = stepConfig.MaxTurns,
                 WorkingDirectory = context.WorkingDirectory,
                 AllowedTools = stepConfig.AllowedTools ?? [],
+                McpServers = mcpServers,
                 OnProgress = context.StatusUpdate is not null
                     ? evt =>
                     {
