@@ -1,596 +1,82 @@
-# CodeGenesis
+<div align="center">
+
+# 🧬 CodeGenesis
 
 [![CI](https://github.com/viamus/code-genesis/actions/workflows/ci.yml/badge.svg)](https://github.com/viamus/code-genesis/actions/workflows/ci.yml)
+[![.NET](https://img.shields.io/badge/.NET-10.0-purple?logo=dotnet)](https://dotnet.microsoft.com/)
+[![Claude Code](https://img.shields.io/badge/Claude_Code-Backend-orange?logo=anthropic)](https://docs.anthropic.com/en/docs/claude-code)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Wiki](https://img.shields.io/badge/Docs-Wiki-green?logo=github)](https://github.com/viamus/code-genesis/wiki)
 
-A .NET CLI engine that orchestrates multi-step AI pipelines using [Claude Code](https://docs.anthropic.com/en/docs/claude-code) as the execution backend. Define pipelines in YAML, compose agents with Markdown context bundles, and let Claude handle planning, execution, and validation.
+**A .NET CLI engine that orchestrates multi-step AI pipelines using Claude Code as the execution backend.**
+
+Define pipelines in YAML · Compose agents with Markdown bundles · Let Claude handle the rest
+
+</div>
+
+---
 
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (preview)
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code/getting-started) installed and authenticated
-- An [Anthropic API key](https://console.anthropic.com/) configured for Claude Code
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code/getting-started) installed and authenticated (`npm install -g @anthropic-ai/claude-code`)
 
-### Installing Claude Code
-
-```bash
-npm install -g @anthropic-ai/claude-code
-```
-
-After installing, authenticate:
+## Quick Start
 
 ```bash
-claude login
-```
-
-Verify that it works:
-
-```bash
-claude --version
-```
-
-> For detailed setup instructions, see the [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code/getting-started).
-
-## Getting Started
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/your-org/code-genesis-github.git
-cd code-genesis-github
-```
-
-### 2. Build the project
-
-```bash
+# Clone & build
+git clone https://github.com/viamus/code-genesis.git && cd code-genesis
 dotnet build
-```
 
-### 3. Run the hello-world pipeline
-
-```bash
+# Run a YAML pipeline
 dotnet run --project CodeGenesis.Engine -- run-pipeline examples/hello-world.yml
-```
 
-Override input variables from the command line:
-
-```bash
-dotnet run --project CodeGenesis.Engine -- run-pipeline examples/hello-world.yml \
-  --input task="Create a Python calculator" \
-  --input language="python"
-```
-
-### 4. Run a quick ad-hoc task (hardcoded pipeline)
-
-```bash
+# Run an ad-hoc task (Plan → Execute → Validate)
 dotnet run --project CodeGenesis.Engine -- run "Add retry logic to the HttpClient service"
 ```
 
-## CLI Reference
-
-### `run <task>`
-
-Runs a built-in **Plan > Execute > Validate** pipeline for a given task description.
-
-| Option              | Description                              |
-|---------------------|------------------------------------------|
-| `-d, --directory`   | Working directory (default: current)     |
-| `-m, --model`       | Claude model (e.g. `claude-sonnet-4-6`)  |
-| `--max-turns`       | Max agentic turns per step (default: 5, 0 = unlimited) |
-| `--skip-validate`   | Skip the validation step                 |
-
-### `run-pipeline <file>`
-
-Runs a pipeline defined in a YAML configuration file.
-
-| Option              | Description                                     |
-|---------------------|-------------------------------------------------|
-| `-i, --input`       | Input override as `key=value` (repeatable)       |
-| `-d, --directory`   | Working directory (default: current)             |
-| `-m, --model`       | Model override for all steps                     |
-
-## Pipeline YAML Reference
-
-Pipelines are defined in YAML files with four sections:
+## Pipeline Example
 
 ```yaml
-# ── Metadata ──────────────────────────────────────────
 pipeline:
-  name: "My Pipeline"
-  description: "What this pipeline does"
-  version: "1.0"
+  name: "Code Review"
 
-# ── Global settings ──────────────────────────────────
-settings:
-  model: "claude-sonnet-4-6"       # default model for all steps
-  max_turns: 5                      # default max turns
-  timeout_seconds: 300              # process timeout
-  working_directory: "."            # working dir for Claude
-
-# ── Input variables ──────────────────────────────────
 inputs:
   task:
-    description: "What to build"
-    default: "Create a hello world page"
-  language:
-    description: "Target language"
-    default: "html"
+    description: "What to review"
 
-# ── Steps ─────────────────────────────────────────────
 steps:
   - name: "Plan"
-    agent: "architect"
-    description: "Create implementation plan"
-    model: "claude-opus-4-6"        # per-step model override
-    context: "contexts/planner"     # load a context bundle
-    output_key: "plan"              # store output for later steps
+    prompt: "Create a review plan for: {{task}}"
+    output_key: "plan"
 
   - name: "Execute"
-    agent: "engineer"
-    description: "Implement the plan"
-    system_prompt: "You are a senior engineer."
-    prompt: |
-      Implement this plan:
-      {{steps.plan}}
-      Original task: {{task}}
+    prompt: "Implement the plan: {{steps.plan}}"
     max_turns: 10
     output_key: "result"
-    allowed_tools:
-      - "Read"
-      - "Write"
-      - "Edit"
-      - "Bash"
 
   - name: "Validate"
-    agent: "reviewer"
-    description: "Review the implementation"
-    prompt: |
-      Review: {{steps.result}}
-      Verdict: PASS or FAIL
-    optional: true                  # pipeline continues if this fails
-
-# ── Outputs ───────────────────────────────────────────
-outputs:
-  summary:
-    source: "steps.result"
-    description: "Final result"
+    prompt: "Review: {{steps.result}}"
+    optional: true
 ```
 
-### Template Variables
-
-Use `{{variable}}` to reference inputs and `{{steps.<output_key>}}` to reference outputs from previous steps. Variables are resolved just before each step runs, so later steps always see the latest outputs.
-
-### Foreach (Iteration)
-
-Loop over a collection and run sub-steps for each item:
-
-```yaml
-steps:
-  - name: "List modules"
-    prompt: "Return a JSON array of module names"
-    output_key: "modules"
-
-  - foreach:
-      collection: "{{steps.modules}}"    # JSON array or comma-separated string
-      item_var: "module"                  # variable name for current item (default: "item")
-      output_key: "module_results"        # aggregated results stored as JSON array
-      steps:
-        - name: "Analyze {{module}}"
-          prompt: "Analyze module: {{module}}"
-          output_key: "analysis"
-```
-
-**Collection formats** — The `collection` field accepts a JSON array (`["a","b","c"]`), a comma-separated string (`a,b,c`), or a newline-separated string.
-
-**Loop variables** — Inside foreach sub-steps you can use:
-- `{{<item_var>}}` (e.g. `{{module}}`) — the current item value
-- `{{loop.item}}` — alias for the current item
-- `{{loop.index}}` — zero-based index of the current iteration
-
-**Scoping** — Each iteration gets its own context. Sub-step outputs from one iteration don't leak into the next. When `output_key` is set, all iteration results are aggregated into a JSON array.
-
-### Parallel (Concurrent Branches)
-
-Run multiple independent branches concurrently:
-
-```yaml
-steps:
-  - parallel:
-      max_concurrency: 5               # optional, default = unlimited
-      fail_fast: true                   # optional, cancel siblings on first failure
-      branches:
-        - name: "Security Review"
-          output_key: "security"
-          steps:
-            - name: "Check vulnerabilities"
-              prompt: "Review for security issues"
-              output_key: "security"
-
-        - name: "Performance Review"
-          output_key: "performance"
-          steps:
-            - name: "Check performance"
-              prompt: "Review for performance"
-              output_key: "performance"
-```
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `max_concurrency` | unlimited | Maximum branches running at the same time |
-| `fail_fast` | `false` | If `true`, cancel remaining branches when one fails |
-
-Each branch runs in an isolated context. After all branches complete, their outputs are merged back into the parent context.
-
-### Parallel Foreach (Concurrent Iteration)
-
-Iterate over a collection **concurrently** — combines foreach's collection parsing with parallel's concurrency model:
-
-```yaml
-steps:
-  - name: "List modules"
-    prompt: "Return a JSON array of module names"
-    output_key: "modules"
-
-  - parallel_foreach:
-      collection: "{{steps.modules}}"    # JSON array or comma-separated string
-      item_var: "module"                  # variable name for current item
-      max_concurrency: 3                  # optional, default = unlimited
-      fail_fast: false                    # optional, cancel siblings on first failure
-      output_key: "results"              # aggregated results as JSON array
-      steps:
-        - name: "Analyze {{module}}"
-          prompt: "Analyze module: {{module}}"
-          output_key: "analysis"
-```
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `collection` | *(required)* | JSON array, comma-separated, or newline-separated string |
-| `item_var` | `"item"` | Variable name for the current item |
-| `max_concurrency` | unlimited | Maximum items processing at the same time |
-| `fail_fast` | `false` | If `true`, cancel remaining items when one fails |
-| `output_key` | `null` | Store all iteration results as a JSON array |
-
-Each iteration gets an isolated context with the same loop variables as `foreach` (`{{loop.item}}`, `{{loop.index}}`, `{{<item_var>}}`). Sub-step rendering is suppressed — only item-level start/completion messages are shown.
-
-See [`examples/parallel-foreach.yml`](examples/parallel-foreach.yml) for a complete working example.
-
-### Composing Foreach + Parallel
-
-Foreach and parallel can be nested. For example, "for each module, run lint and test in parallel":
-
-```yaml
-steps:
-  - foreach:
-      collection: "{{steps.modules}}"
-      item_var: "module"
-      steps:
-        - parallel:
-            branches:
-              - name: "Lint"
-                steps:
-                  - name: "Lint {{module}}"
-                    prompt: "Lint module {{module}}"
-              - name: "Test"
-                steps:
-                  - name: "Test {{module}}"
-                    prompt: "Test module {{module}}"
-```
-
-See [`examples/foreach-parallel.yml`](examples/foreach-parallel.yml) for a complete working example.
-
-### Approval Step
-
-The `approval` step pauses pipeline execution and prompts the user for confirmation directly in the console. If the user accepts, the pipeline continues; if they reject, the pipeline stops with a failure.
-
-```yaml
-steps:
-  - name: Generate plan
-    prompt: "Create a deployment plan for the project"
-    output_key: deployment_plan
-
-  - approval:
-      name: "Approve deployment plan"
-      message: "Review the plan above and confirm you want to proceed with deployment."
-      display_key: deployment_plan   # optional: shows the value of this output in the panel
-
-  - name: Execute deployment
-    prompt: "Execute the deployment plan"
-```
-
-**Fields:**
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | No | Label shown in the pipeline progress (default: `"Approval"`) |
-| `description` | No | Sub-label shown under the step name |
-| `message` | No | Message displayed inside the approval panel |
-| `display_key` | No | `output_key` of a previous step whose output is shown as a preview |
-
-**Behavior:**
-- The step renders a double-bordered panel in the console with `⚠ APPROVAL REQUIRED` and your message.
-- If `display_key` is set, the referenced step output is shown in a rounded preview box below the panel.
-- The user is prompted `Continue? [y/N]`. Accepted inputs:
-  - **Approve:** `y`, `yes`, `ok`
-  - **Reject:** `n`, `no`, or pressing Enter (defaults to no)
-- Any other input re-prompts the user.
-- On rejection the pipeline stops immediately with a `Pipeline Failed` banner.
-
-See [`examples/approval.yml`](examples/approval.yml) for a complete working example.
-
-### MCP Servers (Custom Tools)
-
-Steps can declare [MCP](https://modelcontextprotocol.io/) stdio servers — Python scripts, .NET executables, or any process that speaks the MCP stdio protocol — to add **custom tools on demand**. Claude will see these tools alongside its built-in tools (Read, Write, Bash, etc.) and can call them during execution.
-
-#### Step-level MCP servers
-
-```yaml
-steps:
-  - name: "Analyze codebase"
-    prompt: "Use the analyzer tool to check for issues"
-    mcp_servers:
-      analyzer:
-        command: "python"
-        args: ["tools/analyzer_server.py"]
-        env:
-          MODE: "strict"
-    allowed_tools:
-      - "mcp__analyzer__run_analysis"
-```
-
-#### Global MCP servers
-
-Define servers in `settings` to make them available to **all** steps:
-
-```yaml
-settings:
-  model: "claude-sonnet-4-6"
-  mcp_servers:
-    shared-db:
-      command: "python"
-      args: ["tools/db_server.py"]
-      env:
-        DB_HOST: "{{db_host}}"
-
-steps:
-  - name: "Query data"
-    prompt: "Use the database tool to fetch user stats"
-    allowed_tools:
-      - "mcp__shared-db__query"
-```
-
-#### MCP servers in context bundles
-
-Agent definitions (YAML) can also declare MCP servers, so a reusable agent bundle can bring its own tools:
-
-```yaml
-# contexts/data-analyst/agent.yml
-system_prompt: "You are a data analyst with access to the database."
-allowed_tools:
-  - "mcp__db__query"
-  - "mcp__db__schema"
-mcp_servers:
-  db:
-    command: "dotnet"
-    args: ["run", "--project", "tools/DbServer"]
-```
-
-#### Merge order
-
-When multiple levels define MCP servers, they are merged with **later sources winning** on name collision:
-
-1. **Global** (`settings.mcp_servers`) — base layer
-2. **Context bundle** (`agent.yml`) — overrides global
-3. **Step-level** (`steps[].mcp_servers`) — overrides both
-
-#### Configuration fields
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `command` | Yes | Executable to run (e.g. `"python"`, `"dotnet"`, `"node"`) |
-| `args` | No | Command-line arguments passed to the executable |
-| `env` | No | Environment variables set for the MCP server process |
-
-All fields support template variables (`{{variable}}`), resolved from pipeline inputs at build time.
-
-#### How it works
-
-1. CodeGenesis writes the MCP server config to a temporary JSON file
-2. Passes `--mcp-config <path>` to the Claude CLI process
-3. Claude CLI starts the MCP server(s), making their tools available during the step
-4. When the step finishes, the MCP server(s) are terminated and the temp file is cleaned up
-
-Each step invocation gets its own temp file (GUID-based naming), so parallel steps are fully thread-safe.
-
-### Understanding `max_turns`
-
-A **turn** is one complete round-trip between CodeGenesis and Claude: the engine sends a prompt, Claude reasons about it, optionally calls tools (Read, Write, Edit, Bash, etc.), and returns a response. Complex tasks often require multiple turns — for example, Claude might read a file in turn 1, edit it in turn 2, and run tests in turn 3.
-
-`max_turns` limits how many of these round-trips a single step is allowed to perform. This controls both cost and execution time:
-
-| Value | Behavior |
-|-------|----------|
-| `0`   | **Unlimited**: Claude runs with no turn limit — it will keep working until the task is complete or the timeout is reached. Use this for complex, open-ended tasks where you want full autonomy. |
-| `1`   | Single-shot: Claude responds once with no tool use. Good for planning or review steps that only need to produce text. |
-| `3-5` | Light agentic work: enough for reading a few files and producing a response. This is the default. |
-| `10+` | Deep agentic work: Claude can explore the codebase, create/edit multiple files, run commands, and iterate. Use for execution-heavy steps. |
-
-You can set it at three levels (most specific wins):
-
-1. **Per step** — `max_turns: 10` in a YAML step or agent frontmatter
-2. **Per pipeline** — `settings.max_turns: 5` in the YAML global settings
-3. **Global default** — `MaxTurnsDefault` in `appsettings.json` or via `--max-turns` CLI flag (default: `5`)
-
-**Unlimited turns from the CLI:**
-
-```bash
-# Ad-hoc command with unlimited turns
-dotnet run --project CodeGenesis.Engine -- run "Build a full REST API" --max-turns 0
-
-# YAML pipeline with unlimited turns on a specific step
-steps:
-  - name: "Execute"
-    max_turns: 0    # let Claude work until done
-```
-
-> **Warning:** Unlimited turns can consume significant API credits and run for a long time. Make sure `timeout_seconds` is configured appropriately to act as a safety net.
-
-## Context Bundles
-
-Context bundles let you package agent instructions as reusable Markdown directories instead of inlining everything in YAML. A step references a bundle via the `context` field:
-
-```yaml
-steps:
-  - name: "Plan"
-    context: "contexts/planner"
-```
-
-### Directory Structure
-
-```
-contexts/planner/
-  CONTEXT.md                  # General instructions (loaded first)
-  agents/
-    architect.md              # Agent definition with frontmatter
-  skills/
-    plan-format/
-      SKILL.md                # Additional skill instructions
-```
-
-### Agent Frontmatter
-
-Agent `.md` files support YAML frontmatter for configuration:
-
-```markdown
----
-model: claude-opus-4-6
-tools: Read, Grep, Glob
-maxTurns: 1
-prompt: "Analyze and plan the following task:\nTask: {{task}}"
----
-
-# Software Architect
-
-You are a senior software architect...
-```
-
-The Markdown body becomes the system prompt. Frontmatter fields (`model`, `tools`, `maxTurns`, `prompt`) override pipeline-level settings.
-
-### Loading Priority
-
-When a context bundle is loaded, values are resolved in this order (first defined wins):
-
-1. Agent frontmatter (`agents/*.md`)
-2. Pipeline YAML step config
-3. Pipeline YAML global settings
-
-## Configuration
-
-### Environment Variables
-
-All configuration can be set via environment variables prefixed with `CODEGENESIS_`:
-
-```bash
-export CODEGENESIS_Claude__CliPath="/usr/local/bin/claude"
-export CODEGENESIS_Claude__DefaultModel="claude-sonnet-4-6"
-export CODEGENESIS_Claude__TimeoutSeconds=600
-```
-
-### appsettings.json
-
-Place an `appsettings.json` in the Engine project for persistent configuration:
-
-```json
-{
-  "Claude": {
-    "CliPath": "claude",
-    "DefaultModel": "claude-sonnet-4-6",
-    "TimeoutSeconds": 300,
-    "MaxTurnsDefault": 5
-  }
-}
-```
-
-| Key               | Default              | Description                          |
-|-------------------|----------------------|--------------------------------------|
-| `CliPath`         | `"claude"`           | Path to the Claude Code CLI binary   |
-| `DefaultModel`    | `null`               | Model used when none is specified    |
-| `TimeoutSeconds`  | `300`                | Max seconds before killing a process |
-| `MaxTurnsDefault` | `5`                  | Default agentic turns per step (0 = unlimited) |
-
-## Project Structure
-
-```
-code-genesis-github/
-  Solution.slnx
-  examples/
-    hello-world.yml                  # Sample pipeline
-    foreach-parallel.yml             # Foreach + parallel demo
-    parallel-foreach.yml             # Parallel foreach demo
-    contexts/
-      planner/                       # Sample context bundle
-        CONTEXT.md
-        agents/architect.md
-        skills/plan-format/SKILL.md
-  CodeGenesis.Engine/
-    Program.cs                       # Entry point, DI, Serilog, Spectre CLI
-    Claude/
-      ClaudeCliRunner.cs             # Spawns `claude --print` processes
-      ClaudeCliOptions.cs            # Configuration POCO
-      ClaudeRequest.cs               # Request model
-      ClaudeResponse.cs              # Response model
-      IClaudeRunner.cs               # Abstraction for testability
-    Cli/
-      RunCommand.cs                  # `run` command (hardcoded pipeline)
-      RunPipelineCommand.cs          # `run-pipeline` command (YAML-driven)
-    Config/
-      PipelineConfig.cs              # YAML deserialization models
-      PipelineConfigLoader.cs        # YAML loader + template resolver
-      ContextBundleLoader.cs         # Loads context bundles from directories
-      AgentDefinition.cs             # Agent config model
-      McpServerConfig.cs             # MCP stdio server config model
-      MarkdownFrontmatterParser.cs   # Parses YAML frontmatter from .md files
-    Pipeline/
-      PipelineExecutor.cs            # Runs steps sequentially (implements IStepExecutor)
-      PipelineContext.cs             # Shared state between steps
-      IPipelineStep.cs               # Step interface
-      IStepExecutor.cs               # Interface for recursive sub-execution
-      CollectionParser.cs            # Parses JSON/CSV/newline collections
-      StepResult.cs                  # Step output model
-    Steps/
-      PlanStep.cs                    # Built-in planning step
-      ExecuteStep.cs                 # Built-in execution step
-      ValidateStep.cs                # Built-in validation step
-      DynamicStep.cs                 # YAML-driven dynamic step
-      ForeachStep.cs                 # Iterates over a collection
-      ParallelStep.cs                # Runs branches concurrently
-      ParallelForeachStep.cs         # Iterates over a collection concurrently
-      StepBuilder.cs                 # Builds step trees from YAML model
-    UI/
-      PipelineRenderer.cs            # Spectre.Console output
-      ConsoleTheme.cs                # Theme constants
-```
-
-## Logs
-
-Logs are written to the `logs/` directory with daily rolling files:
-
-```
-logs/codegenesis-20260225.log
-```
-
-Log level is `Debug` by default. Logs include timestamps, Claude process invocations, exit codes, and durations.
-
-## Useful Links
-
-- [Claude Code Documentation](https://docs.anthropic.com/en/docs/claude-code)
-- [Claude Code CLI Reference](https://docs.anthropic.com/en/docs/claude-code/cli-reference)
-- [Claude Code SDK (Sub-agents)](https://docs.anthropic.com/en/docs/claude-code/sdk)
-- [Claude Models Overview](https://docs.anthropic.com/en/docs/about-claude/models)
-- [Claude Code Best Practices](https://docs.anthropic.com/en/docs/claude-code/best-practices)
-- [Prompt Engineering Guide](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering)
-- [Anthropic Cookbook](https://github.com/anthropics/anthropic-cookbook)
-- [Spectre.Console Documentation](https://spectreconsole.net/)
-- [YamlDotNet](https://github.com/aaubry/YamlDotNet)
+> Use `{{variable}}` for inputs and `{{steps.<key>}}` for outputs from previous steps.
+
+## Documentation
+
+Full documentation is available in the **[Wiki](https://github.com/viamus/code-genesis/wiki)**:
+
+| | Page | |
+|---|---|---|
+| 🚀 | [Getting Started](https://github.com/viamus/code-genesis/wiki/Getting-Started) | Prerequisites, installation, first pipeline |
+| 💻 | [CLI Reference](https://github.com/viamus/code-genesis/wiki/CLI-Reference) | `run` and `run-pipeline` commands |
+| 📋 | [Pipeline YAML Reference](https://github.com/viamus/code-genesis/wiki/Pipeline-YAML-Reference) | YAML structure, template variables, max_turns |
+| 🔀 | [Step Types](https://github.com/viamus/code-genesis/wiki/Step-Types) | Simple, Foreach, Parallel, ParallelForeach, Approval |
+| 🔌 | [MCP Servers](https://github.com/viamus/code-genesis/wiki/MCP-Servers) | Custom tools via MCP stdio protocol |
+| 📦 | [Context Bundles](https://github.com/viamus/code-genesis/wiki/Context-Bundles) | Reusable agent instruction packages |
+| ⚙️ | [Configuration](https://github.com/viamus/code-genesis/wiki/Configuration) | Environment variables, appsettings.json, logs |
+| 🏗️ | [Project Structure](https://github.com/viamus/code-genesis/wiki/Project-Structure) | Source tree and architecture |
+| 🧪 | [Testing](https://github.com/viamus/code-genesis/wiki/Testing) | Test project, coverage, CI |
 
 ## Contributing
 
