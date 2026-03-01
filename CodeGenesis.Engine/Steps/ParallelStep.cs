@@ -26,8 +26,7 @@ public sealed class ParallelStep(
         var concurrencyInfo = config.MaxConcurrency.HasValue
             ? $"max {config.MaxConcurrency}"
             : "unlimited";
-        var header = $"parallel [{ConsoleTheme.MutedTag}]{branches.Count} branch(es)[/]  " +
-                     $"[{ConsoleTheme.SubtleTag}]concurrency: {concurrencyInfo}[/]";
+        var detail = $"{branches.Count} branch(es)  concurrency: {concurrencyInfo}";
 
         var branchLabels = branches.Select(b => b.Branch.Name).ToList();
 
@@ -37,7 +36,7 @@ public sealed class ParallelStep(
 
         var branchResults = new (bool Success, PipelineContext Context, string BranchName)[branches.Count];
 
-        await renderer.RunParallelWithLiveTable(branchLabels, header, async liveTable =>
+        await renderer.RunParallelWithLiveTable(branchLabels, "parallel", detail, async liveTable =>
         {
             var tasks = new Task[branches.Count];
 

@@ -15,7 +15,7 @@ public sealed class ParallelLiveTable
     private readonly ItemState[] _items;
     private readonly Table _table;
 
-    public ParallelLiveTable(IReadOnlyList<string> labels, int maxLabelWidth = 45)
+    public ParallelLiveTable(IReadOnlyList<string> labels, int maxLabelWidth = 40)
     {
         _items = new ItemState[labels.Count];
         for (var i = 0; i < labels.Count; i++)
@@ -28,11 +28,12 @@ public sealed class ParallelLiveTable
         }
 
         _table = new Table()
-            .Border(TableBorder.Simple)
+            .Border(TableBorder.Rounded)
             .BorderStyle(new Style(ConsoleTheme.Subtle))
-            .AddColumn(new TableColumn("Status").Width(12).NoWrap())
-            .AddColumn(new TableColumn("Item").Width(maxLabelWidth + 2))
-            .AddColumn(new TableColumn("Activity"));
+            .HideHeaders()
+            .AddColumn(new TableColumn(string.Empty).Width(10).NoWrap())
+            .AddColumn(new TableColumn(string.Empty).NoWrap())
+            .AddColumn(new TableColumn(string.Empty).NoWrap());
 
         RebuildRows();
     }
@@ -45,7 +46,7 @@ public sealed class ParallelLiveTable
         {
             ref var item = ref _items[index];
             item.Status = ItemStatus.Running;
-            item.Activity = "starting...";
+            item.Activity = "starting\u2026";
             item.StartedAt = Stopwatch.GetTimestamp();
         }
     }
@@ -55,7 +56,7 @@ public sealed class ParallelLiveTable
         lock (_lock)
         {
             ref var item = ref _items[index];
-            item.Activity = Truncate(message, 70);
+            item.Activity = Truncate(message, 60);
         }
     }
 
@@ -68,7 +69,7 @@ public sealed class ParallelLiveTable
             item.Elapsed = elapsed;
             item.Tokens = tokens;
             item.Cost = cost;
-            item.Activity = FormatMetrics(tokens, cost);
+            item.Activity = FormatMetrics(elapsed, tokens, cost);
         }
     }
 
@@ -102,9 +103,12 @@ public sealed class ParallelLiveTable
                 _ => ("?", ConsoleTheme.MutedTag)
             };
 
-            var statusText = item.Status == ItemStatus.Waiting
-                ? $"[{statusColor}]  {icon}[/]"
-                : $"[{statusColor}]{icon}[/] [{ConsoleTheme.MutedTag}]{FormatDuration(item.Elapsed)}[/]";
+            var statusText = item.Status switch
+            {
+                ItemStatus.Waiting => $"  [{statusColor}]{icon}[/]",
+                ItemStatus.Running => $"[{statusColor}]{icon}[/] [{ConsoleTheme.SubtleTag}]{FormatDuration(item.Elapsed),6}[/]",
+                _ => $"[{statusColor}]{icon}[/] [{ConsoleTheme.MutedTag}]{FormatDuration(item.Elapsed),6}[/]"
+            };
 
             var labelColor = item.Status switch
             {
@@ -116,13 +120,13 @@ public sealed class ParallelLiveTable
 
             var activityColor = item.Status switch
             {
-                ItemStatus.Success => ConsoleTheme.MutedTag,
+                ItemStatus.Success => ConsoleTheme.SubtleTag,
                 ItemStatus.Failed => ConsoleTheme.ErrorTag,
                 _ => ConsoleTheme.SubtleTag
             };
 
             var activityText = item.Status == ItemStatus.Waiting
-                ? $"[{ConsoleTheme.MutedTag}]waiting[/]"
+                ? $"[{ConsoleTheme.MutedTag} italic]waiting[/]"
                 : $"[{activityColor}]{(item.Activity ?? "").EscapeMarkup()}[/]";
 
             _table.AddRow(
@@ -132,12 +136,13 @@ public sealed class ParallelLiveTable
         }
     }
 
-    private static string FormatMetrics(int tokens, double cost)
+    private static string FormatMetrics(TimeSpan elapsed, int tokens, double cost)
     {
         var parts = new List<string>();
+        parts.Add(FormatDuration(elapsed));
         if (tokens > 0) parts.Add($"{tokens:N0} tokens");
         if (cost > 0) parts.Add($"${cost:F4}");
-        return parts.Count > 0 ? string.Join("  ", parts) : "done";
+        return string.Join("  ", parts);
     }
 
     private static string FormatDuration(TimeSpan ts) => ts.TotalSeconds switch

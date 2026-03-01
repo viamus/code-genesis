@@ -292,14 +292,20 @@ public sealed class PipelineRenderer
     /// Runs parallel work with a live-updating table that shows per-item status.
     /// Replaces the chaotic interleaved console output with a clean in-place table.
     /// </summary>
+    /// <param name="labels">Display labels for each parallel item.</param>
+    /// <param name="stepType">Step type name (e.g. "parallel_foreach", "parallel").</param>
+    /// <param name="detail">Detail text (e.g. "area_path  7 item(s)  concurrency: max 3").</param>
+    /// <param name="work">Async delegate that runs the parallel work using the live table.</param>
     public async Task RunParallelWithLiveTable(
         IReadOnlyList<string> labels,
-        string header,
+        string stepType,
+        string detail,
         Func<ParallelLiveTable, Task> work)
     {
         AnsiConsole.MarkupLine(
             $"{Indent}[{ConsoleTheme.PrimaryTag}]\u26a1[/] " +
-            $"[{ConsoleTheme.SecondaryTag}]{header.EscapeMarkup()}[/]");
+            $"[{ConsoleTheme.SecondaryTag}]{stepType.EscapeMarkup()}[/]  " +
+            $"[{ConsoleTheme.MutedTag}]{detail.EscapeMarkup()}[/]");
         AnsiConsole.WriteLine();
 
         var liveTable = new ParallelLiveTable(labels);

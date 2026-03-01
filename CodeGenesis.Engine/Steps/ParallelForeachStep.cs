@@ -47,8 +47,7 @@ public sealed class ParallelForeachStep(
         var concurrencyInfo = config.MaxConcurrency.HasValue
             ? $"max {config.MaxConcurrency}"
             : "unlimited";
-        var header = $"parallel_foreach [{ConsoleTheme.MutedTag}]{config.ItemVar}[/]  " +
-                     $"[{ConsoleTheme.SubtleTag}]{items.Count} item(s)  concurrency: {concurrencyInfo}[/]";
+        var detail = $"{config.ItemVar}  {items.Count} item(s)  concurrency: {concurrencyInfo}";
 
         var maxConcurrency = config.MaxConcurrency ?? int.MaxValue;
         using var semaphore = new SemaphoreSlim(maxConcurrency, maxConcurrency);
@@ -56,7 +55,7 @@ public sealed class ParallelForeachStep(
 
         var iterationResults = new (bool Success, PipelineContext Context, string Item, int Index)[items.Count];
 
-        await renderer.RunParallelWithLiveTable(items, header, async liveTable =>
+        await renderer.RunParallelWithLiveTable(items, "parallel_foreach", detail, async liveTable =>
         {
             var tasks = new Task[items.Count];
 
