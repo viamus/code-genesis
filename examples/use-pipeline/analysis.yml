@@ -1,0 +1,39 @@
+pipeline:
+  name: Code Analysis
+  description: Reusable pipeline that analyzes source code and produces a summary
+
+inputs:
+  source:
+    description: The source code or file path to analyze
+    default: "."
+  focus:
+    description: What aspect to focus the analysis on
+    default: "code quality"
+
+steps:
+  - name: Analyze code
+    prompt: |
+      Analyze the following source for {{focus}}:
+
+      {{source}}
+
+      Provide a structured analysis covering:
+      1. Key findings
+      2. Potential issues
+      3. Recommendations
+    output_key: analysis
+
+  - name: Generate summary
+    prompt: |
+      Based on this analysis, create a brief executive summary (2-3 sentences):
+
+      {{steps.analysis}}
+    output_key: summary
+
+outputs:
+  analysis:
+    source: analysis
+    description: Detailed analysis results
+  summary:
+    source: summary
+    description: Brief executive summary

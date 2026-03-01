@@ -270,6 +270,41 @@ public sealed class PipelineRenderer
         AnsiConsole.WriteLine();
     }
 
+    // ── Sub-pipeline ──────────────────────────────────────────────────
+
+    public void RenderSubPipelineStart(string name, string path, int stepCount)
+    {
+        if (IsSuppressed) return;
+        AnsiConsole.MarkupLine(
+            $"{Indent}[{ConsoleTheme.PrimaryTag}]\U0001F4E6[/] " +
+            $"[{ConsoleTheme.SecondaryTag}]sub-pipeline[/]  " +
+            $"[bold]{name.EscapeMarkup()}[/]  " +
+            $"[{ConsoleTheme.MutedTag}]{path.EscapeMarkup()}  ({stepCount} steps)[/]");
+        AnsiConsole.WriteLine();
+    }
+
+    public void RenderSubPipelineComplete(string name, bool success, TimeSpan elapsed, int tokens, double cost)
+    {
+        if (IsSuppressed) return;
+        var metrics = FormatMetrics(elapsed, tokens, cost);
+
+        if (success)
+        {
+            AnsiConsole.MarkupLine(
+                $"{Indent}[{ConsoleTheme.SuccessTag}]{ConsoleTheme.Check}[/] " +
+                $"[bold]{name.EscapeMarkup()}[/]  " +
+                $"[{ConsoleTheme.SuccessTag}]complete[/]  {metrics}");
+        }
+        else
+        {
+            AnsiConsole.MarkupLine(
+                $"{Indent}[{ConsoleTheme.ErrorTag}]{ConsoleTheme.Cross}[/] " +
+                $"[bold]{name.EscapeMarkup()}[/]  " +
+                $"[{ConsoleTheme.ErrorTag}]failed[/]  {metrics}");
+        }
+        AnsiConsole.WriteLine();
+    }
+
     // ── Foreach ───────────────────────────────────────────────────────
 
     public void RenderForeachStart(string itemVar, int itemCount)

@@ -36,6 +36,9 @@ public sealed class StepBuilder(
         if (entry.IsApproval)
             return new ApprovalStep(entry.Approval!, renderer);
 
+        if (entry.IsUsePipeline)
+            return BuildUsePipeline(entry);
+
         return BuildSimple(entry);
     }
 
@@ -103,6 +106,21 @@ public sealed class StepBuilder(
         return new ParallelForeachStep(
             config, subSteps, executor, renderer,
             PipelineConfigLoader.ResolveTemplate, variables);
+    }
+
+    private UsePipelineStep BuildUsePipeline(StepEntry entry)
+    {
+        return new UsePipelineStep(
+            name: entry.Name ?? "sub-pipeline",
+            pipelinePath: entry.UsePipeline!,
+            pipelineDir: pipelineDir,
+            inputs: entry.Inputs,
+            outputKey: entry.OutputKey,
+            optional: entry.Optional,
+            claude: claude,
+            executor: executor,
+            renderer: renderer,
+            parentVariables: variables);
     }
 
     private ParallelStep BuildParallel(ParallelConfig config)

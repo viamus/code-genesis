@@ -260,6 +260,93 @@ public class PipelineConfigLoaderTests
     }
 
     [Fact]
+    public void LoadFromFile_UsePipelineStep_ParsesCorrectly()
+    {
+        var yaml = """
+            pipeline:
+              name: Composition Test
+            steps:
+              - name: Run child
+                use_pipeline: ./child.yml
+                inputs:
+                  source: "some value"
+                output_key: child_result
+            """;
+
+        var path = Path.Combine(Path.GetTempPath(), $"test-{Guid.NewGuid()}.yaml");
+        File.WriteAllText(path, yaml);
+        try
+        {
+            var config = PipelineConfigLoader.LoadFromFile(path);
+
+            config.Steps.Should().HaveCount(1);
+            config.Steps[0].IsUsePipeline.Should().BeTrue();
+            config.Steps[0].IsSimpleStep.Should().BeFalse();
+            config.Steps[0].Name.Should().Be("Run child");
+            config.Steps[0].UsePipeline.Should().Be("./child.yml");
+            config.Steps[0].Inputs.Should().ContainKey("source");
+            config.Steps[0].Inputs!["source"].Should().Be("some value");
+            config.Steps[0].OutputKey.Should().Be("child_result");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void LoadFromFile_UsePipelineMissingName_ThrowsInvalidOperation()
+    {
+        var yaml = """
+            pipeline:
+              name: Bad
+            steps:
+              - use_pipeline: ./child.yml
+            """;
+
+        var path = Path.Combine(Path.GetTempPath(), $"test-{Guid.NewGuid()}.yaml");
+        File.WriteAllText(path, yaml);
+        try
+        {
+            var act = () => PipelineConfigLoader.LoadFromFile(path);
+
+            act.Should().Throw<InvalidOperationException>()
+                .WithMessage("*missing a 'name'*");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void LoadFromFile_UsePipelineWithOptional_ParsesCorrectly()
+    {
+        var yaml = """
+            pipeline:
+              name: Optional Test
+            steps:
+              - name: Optional child
+                use_pipeline: ./child.yml
+                optional: true
+            """;
+
+        var path = Path.Combine(Path.GetTempPath(), $"test-{Guid.NewGuid()}.yaml");
+        File.WriteAllText(path, yaml);
+        try
+        {
+            var config = PipelineConfigLoader.LoadFromFile(path);
+
+            config.Steps[0].IsUsePipeline.Should().BeTrue();
+            config.Steps[0].Optional.Should().BeTrue();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void LoadFromFile_WithInputsAndOutputs_ParsesCorrectly()
     {
         var yaml = """

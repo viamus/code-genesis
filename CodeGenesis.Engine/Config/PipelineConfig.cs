@@ -211,8 +211,15 @@ public sealed class StepEntry
     [YamlMember(Alias = "approval")]
     public ApprovalConfig? Approval { get; set; }
 
+    [YamlMember(Alias = "use_pipeline")]
+    public string? UsePipeline { get; set; }
+
+    [YamlMember(Alias = "inputs")]
+    public Dictionary<string, string>? Inputs { get; set; }
+
     // --- Discriminators ---
-    public bool IsSimpleStep => Foreach is null && Parallel is null && ParallelForeach is null && Approval is null && Name is not null;
+    public bool IsSimpleStep => Foreach is null && Parallel is null && ParallelForeach is null && Approval is null && UsePipeline is null && Name is not null;
+    public bool IsUsePipeline => UsePipeline is not null;
     public bool IsForeach => Foreach is not null;
     public bool IsParallel => Parallel is not null;
     public bool IsParallelForeach => ParallelForeach is not null;

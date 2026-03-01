@@ -1,0 +1,29 @@
+pipeline:
+  name: Composed Pipeline Demo
+  description: Demonstrates pipeline composition using use_pipeline
+
+steps:
+  - name: Prepare data
+    prompt: |
+      List the key source files in the current project directory.
+      Output just the file paths, one per line.
+    output_key: file_list
+
+  - name: Run analysis
+    use_pipeline: ./analysis.yml
+    inputs:
+      source: "{{steps.file_list}}"
+      focus: "architecture and code organization"
+    output_key: analysis_result
+
+  - name: Generate report
+    prompt: |
+      Generate a final report based on this analysis:
+
+      {{steps.analysis_result}}
+
+      Format as a concise markdown document with sections for:
+      - Overview
+      - Key Findings
+      - Recommendations
+    output_key: report
