@@ -27,12 +27,12 @@ public sealed class PipelineExecutor(
             StepResult result;
             try
             {
-                // Foreach renders its own sequential progress interleaved with sub-steps;
-                // wrapping it in a spinner would swallow that output.
-                // Parallel/ParallelForeach suppress sub-step rendering, so the spinner
-                // runs at the bottom while branch/item completions appear above it.
-                // ApprovalStep requires interactive Console input — no spinner.
-                if (step is ForeachStep or ApprovalStep)
+                // Foreach renders its own sequential progress interleaved with sub-steps.
+                // Parallel/ParallelForeach use their own Live table display.
+                // ApprovalStep requires interactive Console input.
+                // None of these can be wrapped in a spinner (Spectre.Console
+                // does not allow concurrent interactive displays).
+                if (step is ForeachStep or ParallelStep or ParallelForeachStep or ApprovalStep)
                     result = await step.ExecuteAsync(context, ct);
                 else
                     result = await renderer.RunWithSpinner(
