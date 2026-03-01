@@ -10,7 +10,8 @@ namespace CodeGenesis.Engine.Cli;
 public sealed class RunPipelineCommand(
     IClaudeRunner claude,
     PipelineExecutor executor,
-    PipelineRenderer renderer) : AsyncCommand<RunPipelineCommandSettings>
+    PipelineRenderer renderer,
+    CheckpointManager checkpointManager) : AsyncCommand<RunPipelineCommandSettings>
 {
     public override async Task<int> ExecuteAsync(CommandContext commandContext, RunPipelineCommandSettings settings)
     {
@@ -26,6 +27,54 @@ public sealed class RunPipelineCommand(
         {
             renderer.RenderError($"Failed to load pipeline: {ex.Message}");
             return 1;
+        }
+
+        // Compute YAML hash for checkpoint comparison
+        var yamlHash = checkpointManager.ComputeFileHash(settings.File);
+
+        // Handle --resume / --from-step
+        HashSet<string>? completedSteps = null;
+        string? resumeFromStep = null;
+        PipelineCheckpoint? checkpoint = null;
+
+        if (settings.Resume || settings.FromStep is not null)
+        {
+            checkpoint = checkpointManager.Load(settings.File);
+
+            if (checkpoint is null)
+            {
+                renderer.RenderError("No checkpoint found. Run the pipeline without --resume first.");
+                return 1;
+            }
+
+            // Warn if YAML changed since checkpoint
+            if (checkpoint.YamlHash != yamlHash)
+            {
+                renderer.RenderInfo("Warning: Pipeline YAML has changed since the last checkpoint. Resuming with current config.");
+            }
+
+            completedSteps = new HashSet<string>(checkpoint.CompletedSteps);
+
+            if (settings.Resume)
+            {
+                // --resume: determine resume point from checkpoint
+                resumeFromStep = checkpoint.FailedStepName;
+                // If no failed step recorded, all completed steps will be skipped
+                // and execution continues from the first non-completed step
+
+                if (completedSteps.Count == 0 && resumeFromStep is null)
+                {
+                    renderer.RenderInfo("Nothing to resume — no steps were completed.");
+                    return 0;
+                }
+            }
+            else if (settings.FromStep is not null)
+            {
+                // --from-step: validate step exists in pipeline
+                resumeFromStep = settings.FromStep;
+            }
+
+            // Restore cached step outputs into context
         }
 
         // Build template variables from inputs (defaults + overrides)
@@ -71,6 +120,16 @@ public sealed class RunPipelineCommand(
             WorkingDirectory = workingDir
         };
 
+        // Restore cached step outputs from checkpoint
+        if (checkpoint is not null && completedSteps is not null)
+        {
+            foreach (var (key, value) in checkpoint.StepOutputs)
+            {
+                if (completedSteps.Contains(key))
+                    context.StepOutputs[key] = value;
+            }
+        }
+
         // Build step tree using StepBuilder
         List<IPipelineStep> steps;
         try
@@ -84,6 +143,21 @@ public sealed class RunPipelineCommand(
             return 1;
         }
 
+        // Validate --from-step target exists
+        if (settings.FromStep is not null && !steps.Any(s => s.Name == settings.FromStep))
+        {
+            renderer.RenderError($"Step '{settings.FromStep}' not found in pipeline.");
+            return 1;
+        }
+
+        // Check if all steps are already completed (--resume with nothing left)
+        if (completedSteps is not null && resumeFromStep is null && steps.All(s => completedSteps.Contains(s.Name)))
+        {
+            renderer.RenderInfo("All steps already completed. Nothing to resume.");
+            checkpointManager.Delete(settings.File);
+            return 0;
+        }
+
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
         {
@@ -93,27 +167,39 @@ public sealed class RunPipelineCommand(
         };
 
         // Execute pipeline — resolve templates for each step just before it runs
-        var success = await executor.RunAsync(steps, context, cts.Token, onBeforeStep: step =>
-        {
-            if (step is DynamicStep dynamicStep)
+        var success = await executor.RunAsync(steps, context, cts.Token,
+            onBeforeStep: step =>
             {
-                // Re-resolve the prompt and system prompt with latest step outputs
-                var allVars = new Dictionary<string, string>(variables);
-                foreach (var (key, value) in context.StepOutputs)
-                    allVars[$"steps.{key}"] = value;
-
-                dynamicStep.UpdateResolvedPrompt(
-                    PipelineConfigLoader.ResolveTemplate(
-                        dynamicStep.OriginalPromptTemplate, allVars));
-
-                if (dynamicStep.OriginalSystemPromptTemplate is not null)
+                if (step is DynamicStep dynamicStep)
                 {
-                    dynamicStep.UpdateResolvedSystemPrompt(
+                    // Re-resolve the prompt and system prompt with latest step outputs
+                    var allVars = new Dictionary<string, string>(variables);
+                    foreach (var (key, value) in context.StepOutputs)
+                        allVars[$"steps.{key}"] = value;
+
+                    dynamicStep.UpdateResolvedPrompt(
                         PipelineConfigLoader.ResolveTemplate(
-                            dynamicStep.OriginalSystemPromptTemplate, allVars));
+                            dynamicStep.OriginalPromptTemplate, allVars));
+
+                    if (dynamicStep.OriginalSystemPromptTemplate is not null)
+                    {
+                        dynamicStep.UpdateResolvedSystemPrompt(
+                            PipelineConfigLoader.ResolveTemplate(
+                                dynamicStep.OriginalSystemPromptTemplate, allVars));
+                    }
                 }
-            }
-        });
+            },
+            completedSteps: completedSteps,
+            resumeFromStep: resumeFromStep,
+            checkpointManager: checkpointManager,
+            pipelineFile: settings.File,
+            yamlHash: yamlHash,
+            pipelineName: config.Pipeline.Name);
+
+        if (!success)
+        {
+            renderer.RenderResumeHint(settings.File);
+        }
 
         return success ? 0 : 1;
     }

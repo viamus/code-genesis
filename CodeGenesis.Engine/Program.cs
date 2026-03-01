@@ -43,6 +43,7 @@ try
     services.AddSingleton<IClaudeRunner, ClaudeCliRunner>();
     services.AddSingleton<PipelineExecutor>();
     services.AddSingleton<IStepExecutor>(sp => sp.GetRequiredService<PipelineExecutor>());
+    services.AddSingleton<CheckpointManager>();
     services.AddSingleton<PipelineRenderer>();
 
     // CLI commands
@@ -67,7 +68,9 @@ try
         config.AddCommand<RunPipelineCommand>("run-pipeline")
             .WithDescription("Run a pipeline from a YAML configuration file")
             .WithExample("run-pipeline", "examples/hello-world.yml")
-            .WithExample("run-pipeline", "examples/hello-world.yml", "--input", "task=\"Create a Python script\"");
+            .WithExample("run-pipeline", "examples/hello-world.yml", "--input", "task=\"Create a Python script\"")
+            .WithExample("run-pipeline", "examples/hello-world.yml", "--resume")
+            .WithExample("run-pipeline", "examples/hello-world.yml", "--from-step", "generate");
     });
 
     return await app.RunAsync(args);

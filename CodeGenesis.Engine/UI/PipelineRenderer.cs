@@ -206,6 +206,25 @@ public sealed class PipelineRenderer
             $"{Indent}    [{ConsoleTheme.SubtleTag}]\U0001F4AD {label.EscapeMarkup()}: {message.EscapeMarkup()}[/]");
     }
 
+    public void RenderStepSkipped(IPipelineStep step, int index, int total)
+    {
+        if (IsSuppressed) return;
+        AnsiConsole.MarkupLine(
+            $"{Indent}[{ConsoleTheme.SubtleTag}]{ConsoleTheme.Dash} Step {index}/{total}[/]  " +
+            $"[{ConsoleTheme.SubtleTag}]{step.Name.EscapeMarkup()}[/]  " +
+            $"[{ConsoleTheme.MutedTag}](cached)[/]");
+    }
+
+    public void RenderResumeHint(string pipelineFile)
+    {
+        if (IsSuppressed) return;
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine(
+            $"  [{ConsoleTheme.SecondaryTag}]Tip:[/] Fix the issue, then resume with:");
+        AnsiConsole.MarkupLine(
+            $"  [{ConsoleTheme.PrimaryTag}]codegenesis run-pipeline {pipelineFile.EscapeMarkup()} --resume[/]");
+    }
+
     public void RenderStepComplete(IPipelineStep step, StepResult result)
     {
         if (IsSuppressed) return;
