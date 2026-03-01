@@ -118,6 +118,8 @@ docker-compose.override.yml
 publish/
 out/
 artifacts/
+*.pubxml
+*.pubxml.user
 
 ##############################
 # Coverage tools
