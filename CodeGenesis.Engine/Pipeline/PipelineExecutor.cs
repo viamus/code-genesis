@@ -94,7 +94,7 @@ public sealed class PipelineExecutor(
             StepResult result;
             try
             {
-                if (step is ForeachStep or ParallelStep or ParallelForeachStep or ApprovalStep)
+                if (step is ForeachStep or ParallelStep or ParallelForeachStep or ApprovalStep or UsePipelineStep)
                     result = await step.ExecuteAsync(context, ct);
                 else
                     result = await renderer.RunWithSpinner(
@@ -128,7 +128,9 @@ public sealed class PipelineExecutor(
                 return false;
             }
 
-            renderer.RenderStepComplete(step, result);
+            // UsePipelineStep renders its own completion via RenderSubPipelineComplete
+            if (step is not UsePipelineStep)
+                renderer.RenderStepComplete(step, result);
 
             if (result.Outcome == StepOutcome.Failed)
             {

@@ -13,7 +13,7 @@ public sealed class RunCommand(
     PipelineExecutor executor,
     PipelineRenderer renderer) : AsyncCommand<RunCommandSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext commandContext, RunCommandSettings settings)
+    public override async Task<int> ExecuteAsync(CommandContext commandContext, RunCommandSettings settings, CancellationToken cancellationToken)
     {
         renderer.RenderBanner();
 
@@ -40,7 +40,7 @@ public sealed class RunCommand(
         if (!settings.SkipValidate)
             steps.Add(new ValidateStep(claude));
 
-        using var cts = new CancellationTokenSource();
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Console.CancelKeyPress += (_, e) =>
         {
             e.Cancel = true;

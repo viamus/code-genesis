@@ -36,6 +36,9 @@ public sealed class StepBuilder(
         if (entry.IsApproval)
             return new ApprovalStep(entry.Approval!, renderer);
 
+        if (entry.IsUsePipeline)
+            return BuildUsePipeline(entry);
+
         return BuildSimple(entry);
     }
 
@@ -51,7 +54,7 @@ public sealed class StepBuilder(
             ApplyBundle(stepConfig, bundle);
         }
 
-        var stepModel = stepConfig.Model ?? bundle?.Model ?? globalModel;
+        var stepModel = NullIfEmpty(stepConfig.Model) ?? NullIfEmpty(bundle?.Model) ?? globalModel;
 
         // Merge MCP servers: global → bundle → step (later wins on key collision)
         var mergedMcpServers = MergeMcpServers(
@@ -105,6 +108,21 @@ public sealed class StepBuilder(
             PipelineConfigLoader.ResolveTemplate, variables);
     }
 
+    private UsePipelineStep BuildUsePipeline(StepEntry entry)
+    {
+        return new UsePipelineStep(
+            name: entry.Name ?? "sub-pipeline",
+            pipelinePath: entry.UsePipeline!,
+            pipelineDir: pipelineDir,
+            inputs: entry.Inputs,
+            outputKey: entry.OutputKey,
+            optional: entry.Optional,
+            claude: claude,
+            executor: executor,
+            renderer: renderer,
+            parentVariables: variables);
+    }
+
     private ParallelStep BuildParallel(ParallelConfig config)
     {
         var branches = config.Branches.Select(branch =>
@@ -139,6 +157,9 @@ public sealed class StepBuilder(
 
         return merged;
     }
+
+    private static string? NullIfEmpty(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value;
 
     private static void ApplyBundle(StepConfig stepConfig, AgentDefinition bundle)
     {

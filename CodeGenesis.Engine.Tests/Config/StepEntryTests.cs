@@ -66,6 +66,41 @@ public class StepEntryTests
     }
 
     [Fact]
+    public void IsUsePipeline_WithUsePipeline_ReturnsTrue()
+    {
+        var entry = new StepEntry
+        {
+            Name = "sub",
+            UsePipeline = "./child.yml"
+        };
+
+        entry.IsUsePipeline.Should().BeTrue();
+        entry.IsSimpleStep.Should().BeFalse();
+        entry.IsForeach.Should().BeFalse();
+        entry.IsParallel.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsUsePipeline_WithoutUsePipeline_ReturnsFalse()
+    {
+        var entry = new StepEntry { Name = "step1", Prompt = "do something" };
+
+        entry.IsUsePipeline.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsSimpleStep_WithUsePipeline_ReturnsFalse()
+    {
+        var entry = new StepEntry
+        {
+            Name = "sub",
+            UsePipeline = "./child.yml"
+        };
+
+        entry.IsSimpleStep.Should().BeFalse();
+    }
+
+    [Fact]
     public void IsSimpleStep_NullNameNoComposite_ReturnsFalse()
     {
         var entry = new StepEntry { Prompt = "orphan prompt" };

@@ -86,6 +86,13 @@ public static partial class PipelineConfigLoader
                     ValidateStepEntries(branch.Steps, $"{entryPath}.parallel.{branch.Name}");
                 }
             }
+            else if (entry.IsUsePipeline)
+            {
+                if (string.IsNullOrWhiteSpace(entry.Name))
+                    throw new InvalidOperationException($"use_pipeline step at {entryPath} is missing a 'name'.");
+                if (string.IsNullOrWhiteSpace(entry.UsePipeline))
+                    throw new InvalidOperationException($"use_pipeline step '{entry.Name}' at {entryPath} has an empty pipeline path.");
+            }
             else
             {
                 // Simple step
