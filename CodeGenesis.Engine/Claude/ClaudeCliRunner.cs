@@ -278,7 +278,7 @@ public sealed class ClaudeCliRunner(
         sb.Append("--print --verbose --output-format stream-json");
 
         var model = request.Model ?? _options.DefaultModel;
-        if (model is not null)
+        if (!string.IsNullOrWhiteSpace(model))
             sb.Append($" --model {model}");
 
         if (request.SystemPrompt is not null)

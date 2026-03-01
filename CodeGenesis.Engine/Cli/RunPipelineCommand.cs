@@ -13,7 +13,7 @@ public sealed class RunPipelineCommand(
     PipelineRenderer renderer,
     CheckpointManager checkpointManager) : AsyncCommand<RunPipelineCommandSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext commandContext, RunPipelineCommandSettings settings)
+    public override async Task<int> ExecuteAsync(CommandContext commandContext, RunPipelineCommandSettings settings, CancellationToken cancellationToken)
     {
         renderer.RenderBanner();
 
@@ -104,7 +104,8 @@ public sealed class RunPipelineCommand(
         }
 
         // Determine global model: CLI override > YAML settings > null (use default)
-        var globalModel = settings.Model ?? config.Settings.Model;
+        var globalModel = settings.Model ?? (string.IsNullOrWhiteSpace(config.Settings.Model)
+            ? null : config.Settings.Model);
 
         // Determine working directory
         var workingDir = settings.Directory
@@ -158,7 +159,7 @@ public sealed class RunPipelineCommand(
             return 0;
         }
 
-        using var cts = new CancellationTokenSource();
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Console.CancelKeyPress += (_, e) =>
         {
             e.Cancel = true;

@@ -128,7 +128,9 @@ public sealed class PipelineExecutor(
                 return false;
             }
 
-            renderer.RenderStepComplete(step, result);
+            // UsePipelineStep renders its own completion via RenderSubPipelineComplete
+            if (step is not UsePipelineStep)
+                renderer.RenderStepComplete(step, result);
 
             if (result.Outcome == StepOutcome.Failed)
             {

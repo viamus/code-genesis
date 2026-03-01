@@ -76,7 +76,8 @@ public sealed class UsePipelineStep(
                 var childVariables = BuildChildVariables(childConfig, context);
 
                 // Build child steps
-                var childGlobalModel = childConfig.Settings.Model;
+                var childGlobalModel = string.IsNullOrWhiteSpace(childConfig.Settings.Model)
+                    ? null : childConfig.Settings.Model;
                 var childBuilder = new StepBuilder(
                     claude, executor, renderer,
                     childPipelineDir, childGlobalModel, childConfig.Settings, childVariables);
@@ -111,7 +112,7 @@ public sealed class UsePipelineStep(
                 if (!success)
                 {
                     context.StepsFailed += childContext.StepsFailed;
-                    renderer.RenderSubPipelineComplete(name, false, sw.Elapsed, totalTokens, totalCost);
+                    renderer.RenderSubPipelineComplete(name, false, childSteps.Count, sw.Elapsed, totalTokens, totalCost);
 
                     return FailOrSkip(
                         $"Sub-pipeline '{childConfig.Pipeline.Name}' failed" +
@@ -122,7 +123,7 @@ public sealed class UsePipelineStep(
                 // Merge outputs back into parent context
                 MergeOutputs(childConfig, childContext, context);
 
-                renderer.RenderSubPipelineComplete(name, true, sw.Elapsed, totalTokens, totalCost);
+                renderer.RenderSubPipelineComplete(name, true, childSteps.Count, sw.Elapsed, totalTokens, totalCost);
 
                 return new StepResult
                 {

@@ -54,7 +54,7 @@ public sealed class StepBuilder(
             ApplyBundle(stepConfig, bundle);
         }
 
-        var stepModel = stepConfig.Model ?? bundle?.Model ?? globalModel;
+        var stepModel = NullIfEmpty(stepConfig.Model) ?? NullIfEmpty(bundle?.Model) ?? globalModel;
 
         // Merge MCP servers: global → bundle → step (later wins on key collision)
         var mergedMcpServers = MergeMcpServers(
@@ -157,6 +157,9 @@ public sealed class StepBuilder(
 
         return merged;
     }
+
+    private static string? NullIfEmpty(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value;
 
     private static void ApplyBundle(StepConfig stepConfig, AgentDefinition bundle)
     {

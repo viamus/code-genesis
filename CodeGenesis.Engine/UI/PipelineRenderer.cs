@@ -283,7 +283,7 @@ public sealed class PipelineRenderer
         AnsiConsole.WriteLine();
     }
 
-    public void RenderSubPipelineComplete(string name, bool success, TimeSpan elapsed, int tokens, double cost)
+    public void RenderSubPipelineComplete(string name, bool success, int stepCount, TimeSpan elapsed, int tokens, double cost)
     {
         if (IsSuppressed) return;
         var metrics = FormatMetrics(elapsed, tokens, cost);
@@ -291,16 +291,12 @@ public sealed class PipelineRenderer
         if (success)
         {
             AnsiConsole.MarkupLine(
-                $"{Indent}[{ConsoleTheme.SuccessTag}]{ConsoleTheme.Check}[/] " +
-                $"[bold]{name.EscapeMarkup()}[/]  " +
-                $"[{ConsoleTheme.SuccessTag}]complete[/]  {metrics}");
+                $"{Indent}  [{ConsoleTheme.SuccessTag}]\U0001F4E6 {stepCount}/{stepCount} completed[/]  {metrics}");
         }
         else
         {
             AnsiConsole.MarkupLine(
-                $"{Indent}[{ConsoleTheme.ErrorTag}]{ConsoleTheme.Cross}[/] " +
-                $"[bold]{name.EscapeMarkup()}[/]  " +
-                $"[{ConsoleTheme.ErrorTag}]failed[/]  {metrics}");
+                $"{Indent}  [{ConsoleTheme.ErrorTag}]\U0001F4E6 {name.EscapeMarkup()} failed[/]  {metrics}");
         }
         AnsiConsole.WriteLine();
     }
