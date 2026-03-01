@@ -286,45 +286,65 @@ public sealed class PipelineRenderer
         AnsiConsole.WriteLine();
     }
 
-    // ── Parallel Foreach ──────────────────────────────────────────────
+    // ── Parallel Live Table ─────────────────────────────────────────
 
-    public void RenderParallelForeachStart(string itemVar, int itemCount, int? maxConcurrency)
+    /// <summary>
+    /// Runs parallel work with a live-updating table that shows per-item status.
+    /// Replaces the chaotic interleaved console output with a clean in-place table.
+    /// </summary>
+    public async Task RunParallelWithLiveTable(
+        IReadOnlyList<string> labels,
+        string header,
+        Func<ParallelLiveTable, Task> work)
     {
-        var concurrencyInfo = maxConcurrency.HasValue
-            ? $"max {maxConcurrency}"
-            : "unlimited";
         AnsiConsole.MarkupLine(
             $"{Indent}[{ConsoleTheme.PrimaryTag}]\u26a1[/] " +
-            $"[{ConsoleTheme.SecondaryTag}]parallel_foreach[/] " +
-            $"[{ConsoleTheme.MutedTag}]{itemVar.EscapeMarkup()}[/]  " +
-            $"[{ConsoleTheme.SubtleTag}]{itemCount} item(s)  concurrency: {concurrencyInfo}[/]");
+            $"[{ConsoleTheme.SecondaryTag}]{header.EscapeMarkup()}[/]");
+        AnsiConsole.WriteLine();
+
+        var liveTable = new ParallelLiveTable(labels);
+
+        await AnsiConsole.Live(liveTable.Renderable)
+            .AutoClear(false)
+            .Overflow(VerticalOverflow.Ellipsis)
+            .StartAsync(async ctx =>
+            {
+                ctx.Refresh();
+
+                // Periodic refresh to update elapsed timers for running items
+                using var refreshCts = new CancellationTokenSource();
+                var refreshTask = Task.Run(async () =>
+                {
+                    while (!refreshCts.Token.IsCancellationRequested)
+                    {
+                        try
+                        {
+                            await Task.Delay(1000, refreshCts.Token);
+                            liveTable.Refresh();
+                            ctx.Refresh();
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            break;
+                        }
+                    }
+                }, refreshCts.Token);
+
+                await work(liveTable);
+
+                await refreshCts.CancelAsync();
+                try { await refreshTask; } catch (OperationCanceledException) { }
+
+                // Final refresh to show completed state
+                liveTable.Refresh();
+                ctx.Refresh();
+            });
+
         AnsiConsole.WriteLine();
     }
 
-    public void RenderParallelForeachItemStart(string itemValue, int index, int total)
+    public void RenderParallelSummary(int total, int succeeded, int failed)
     {
-        AnsiConsole.MarkupLine(
-            $"{Indent}  [{ConsoleTheme.PrimaryTag}]\u25cb[/] " +
-            $"[{ConsoleTheme.SecondaryTag}][[{index + 1}/{total}]][/] " +
-            $"[bold]{Truncate(itemValue, 50).EscapeMarkup()}[/]");
-    }
-
-    public void RenderParallelForeachItemComplete(string itemValue, int index, int total, bool success, TimeSpan elapsed, int tokens, double cost)
-    {
-        var (icon, colorTag) = success
-            ? (ConsoleTheme.Check, ConsoleTheme.SuccessTag)
-            : (ConsoleTheme.Cross, ConsoleTheme.ErrorTag);
-        var metrics = FormatMetrics(elapsed, tokens, cost);
-
-        AnsiConsole.MarkupLine(
-            $"{Indent}  [{colorTag}]{icon}[/] " +
-            $"[{ConsoleTheme.MutedTag}][[{index + 1}/{total}]][/] " +
-            $"{Truncate(itemValue, 50).EscapeMarkup()}  {metrics}");
-    }
-
-    public void RenderParallelForeachEnd(int total, int succeeded, int failed)
-    {
-        AnsiConsole.WriteLine();
         if (failed == 0)
         {
             AnsiConsole.MarkupLine(
@@ -335,29 +355,6 @@ public sealed class PipelineRenderer
             AnsiConsole.MarkupLine(
                 $"{Indent}  [{ConsoleTheme.ErrorTag}]\u26a1 {succeeded} completed, {failed} failed[/]");
         }
-    }
-
-    // ── Parallel ──────────────────────────────────────────────────────
-
-    public void RenderParallelStart(int branchCount, int? maxConcurrency)
-    {
-        var concurrencyInfo = maxConcurrency.HasValue
-            ? $"max {maxConcurrency}"
-            : "unlimited";
-        AnsiConsole.MarkupLine(
-            $"{Indent}[{ConsoleTheme.SecondaryTag}]parallel[/] " +
-            $"[{ConsoleTheme.MutedTag}]{branchCount} branch(es)[/]  " +
-            $"[{ConsoleTheme.SubtleTag}]concurrency: {concurrencyInfo}[/]");
-    }
-
-    public void RenderParallelBranchComplete(string branchName, bool success, TimeSpan elapsed, int tokens, double cost)
-    {
-        var (icon, colorTag) = success
-            ? (ConsoleTheme.Check, ConsoleTheme.SuccessTag)
-            : (ConsoleTheme.Cross, ConsoleTheme.ErrorTag);
-        var metrics = FormatMetrics(elapsed, tokens, cost);
-        AnsiConsole.MarkupLine(
-            $"{Indent}  [{colorTag}]{icon}[/] {branchName.EscapeMarkup()}  {metrics}");
     }
 
     // ── Approval ──────────────────────────────────────────────────────

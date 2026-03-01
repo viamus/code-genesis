@@ -33,8 +33,6 @@ public sealed class ParallelForeachStep(
         var collectionRaw = resolveTemplate(config.Collection, allVars);
         var items = CollectionParser.Parse(collectionRaw);
 
-        renderer.RenderParallelForeachStart(config.ItemVar, items.Count, config.MaxConcurrency);
-
         if (items.Count == 0)
         {
             sw.Stop();
@@ -46,104 +44,108 @@ public sealed class ParallelForeachStep(
             };
         }
 
+        var concurrencyInfo = config.MaxConcurrency.HasValue
+            ? $"max {config.MaxConcurrency}"
+            : "unlimited";
+        var header = $"parallel_foreach [{ConsoleTheme.MutedTag}]{config.ItemVar}[/]  " +
+                     $"[{ConsoleTheme.SubtleTag}]{items.Count} item(s)  concurrency: {concurrencyInfo}[/]";
+
         var maxConcurrency = config.MaxConcurrency ?? int.MaxValue;
         using var semaphore = new SemaphoreSlim(maxConcurrency, maxConcurrency);
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
         var iterationResults = new (bool Success, PipelineContext Context, string Item, int Index)[items.Count];
-        var tasks = new Task[items.Count];
 
-        for (var i = 0; i < items.Count; i++)
+        await renderer.RunParallelWithLiveTable(items, header, async liveTable =>
         {
-            var index = i;
-            var item = items[i];
+            var tasks = new Task[items.Count];
 
-            tasks[i] = Task.Run(async () =>
+            for (var i = 0; i < items.Count; i++)
             {
-                await semaphore.WaitAsync(linkedCts.Token);
-                try
-                {
-                    // Suppress all sub-step rendering; only item-level messages show
-                    renderer.PushScope();
-                    renderer.SuppressRendering();
+                var index = i;
+                var item = items[i];
 
-                    // Skip null or empty items
-                    if (string.IsNullOrWhiteSpace(item))
+                tasks[i] = Task.Run(async () =>
+                {
+                    await semaphore.WaitAsync(linkedCts.Token);
+                    try
                     {
-                        renderer.ResumeRendering();
-                        renderer.RenderParallelForeachItemStart("(empty)", index, items.Count);
+                        // Suppress all sub-step rendering inside parallel
+                        renderer.PushScope();
                         renderer.SuppressRendering();
-                        var emptyCtx = new PipelineContext
+
+                        // Skip null or empty items
+                        if (string.IsNullOrWhiteSpace(item))
+                        {
+                            var emptyCtx = new PipelineContext
+                            {
+                                TaskDescription = context.TaskDescription,
+                                WorkingDirectory = context.WorkingDirectory
+                            };
+                            liveTable.MarkStarted(index);
+                            liveTable.MarkComplete(index, true, TimeSpan.Zero, 0, 0);
+                            iterationResults[index] = (true, emptyCtx, item, index);
+                            return;
+                        }
+
+                        liveTable.MarkStarted(index);
+
+                        // Create isolated context for this iteration
+                        var iterationContext = new PipelineContext
                         {
                             TaskDescription = context.TaskDescription,
-                            WorkingDirectory = context.WorkingDirectory
+                            WorkingDirectory = context.WorkingDirectory,
+                            StatusUpdate = msg => liveTable.UpdateActivity(index, msg)
                         };
-                        iterationResults[index] = (true, emptyCtx, item, index);
-                        return;
+
+                        // Copy parent step outputs so sub-steps can read them
+                        foreach (var (key, value) in context.StepOutputs)
+                            iterationContext.StepOutputs[key] = value;
+
+                        // Build loop variables for this iteration
+                        var iterVars = new Dictionary<string, string>(allVars)
+                        {
+                            ["loop.item"] = item,
+                            ["loop.index"] = index.ToString(),
+                            [config.ItemVar] = item
+                        };
+
+                        // Clone sub-steps for this iteration so parallel threads don't share mutable state
+                        var clonedSubSteps = CloneSubSteps(subSteps, iterVars);
+
+                        var iterSw = Stopwatch.StartNew();
+
+                        var success = await executor.RunAsync(clonedSubSteps, iterationContext, linkedCts.Token,
+                            onBeforeStep: step => ResolveBeforeStep(step, iterVars, iterationContext));
+
+                        iterSw.Stop();
+
+                        iterationResults[index] = (success, iterationContext, item, index);
+
+                        if (!success && config.FailFast)
+                            await linkedCts.CancelAsync();
+
+                        var iterTokens = iterationContext.TotalInputTokens + iterationContext.TotalOutputTokens;
+                        liveTable.MarkComplete(index, success, iterSw.Elapsed, iterTokens, iterationContext.TotalCostUsd);
                     }
-
-                    // Temporarily resume to render our own item-level message
-                    renderer.ResumeRendering();
-                    renderer.RenderParallelForeachItemStart(item, index, items.Count);
-                    renderer.SuppressRendering();
-
-                    // Create isolated context for this iteration
-                    var iterationContext = new PipelineContext
+                    finally
                     {
-                        TaskDescription = context.TaskDescription,
-                        WorkingDirectory = context.WorkingDirectory,
-                        StatusUpdate = msg => renderer.RenderThinking(item, msg)
-                    };
+                        renderer.ResumeRendering();
+                        renderer.PopScope();
+                        semaphore.Release();
+                    }
+                }, linkedCts.Token);
+            }
 
-                    // Copy parent step outputs so sub-steps can read them
-                    foreach (var (key, value) in context.StepOutputs)
-                        iterationContext.StepOutputs[key] = value;
-
-                    // Build loop variables for this iteration
-                    var iterVars = new Dictionary<string, string>(allVars)
-                    {
-                        ["loop.item"] = item,
-                        ["loop.index"] = index.ToString(),
-                        [config.ItemVar] = item
-                    };
-
-                    // Clone sub-steps for this iteration so parallel threads don't share mutable state
-                    var clonedSubSteps = CloneSubSteps(subSteps, iterVars);
-
-                    var iterSw = Stopwatch.StartNew();
-
-                    var success = await executor.RunAsync(clonedSubSteps, iterationContext, linkedCts.Token,
-                        onBeforeStep: step => ResolveBeforeStep(step, iterVars, iterationContext));
-
-                    iterSw.Stop();
-
-                    iterationResults[index] = (success, iterationContext, item, index);
-
-                    if (!success && config.FailFast)
-                        await linkedCts.CancelAsync();
-
-                    // Resume rendering for our own completion message
-                    renderer.ResumeRendering();
-                    var iterTokens = iterationContext.TotalInputTokens + iterationContext.TotalOutputTokens;
-                    renderer.RenderParallelForeachItemComplete(item, index, items.Count, success, iterSw.Elapsed, iterTokens, iterationContext.TotalCostUsd);
-                }
-                finally
-                {
-                    renderer.ResumeRendering();
-                    renderer.PopScope();
-                    semaphore.Release();
-                }
-            }, linkedCts.Token);
-        }
-
-        try
-        {
-            await Task.WhenAll(tasks);
-        }
-        catch (OperationCanceledException) when (config.FailFast)
-        {
-            // Expected when fail_fast cancels siblings
-        }
+            try
+            {
+                await Task.WhenAll(tasks);
+            }
+            catch (OperationCanceledException) when (config.FailFast)
+            {
+                // Expected when fail_fast cancels siblings
+            }
+        });
 
         sw.Stop();
 
@@ -191,7 +193,7 @@ public sealed class ParallelForeachStep(
 
         var succeeded = iterationResults.Count(r => r.Success);
         var failed = items.Count - succeeded;
-        renderer.RenderParallelForeachEnd(items.Count, succeeded, failed);
+        renderer.RenderParallelSummary(items.Count, succeeded, failed);
 
         return new StepResult
         {

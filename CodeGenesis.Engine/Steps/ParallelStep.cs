@@ -23,94 +23,104 @@ public sealed class ParallelStep(
     {
         var sw = Stopwatch.StartNew();
 
-        renderer.RenderParallelStart(branches.Count, config.MaxConcurrency);
+        var concurrencyInfo = config.MaxConcurrency.HasValue
+            ? $"max {config.MaxConcurrency}"
+            : "unlimited";
+        var header = $"parallel [{ConsoleTheme.MutedTag}]{branches.Count} branch(es)[/]  " +
+                     $"[{ConsoleTheme.SubtleTag}]concurrency: {concurrencyInfo}[/]";
+
+        var branchLabels = branches.Select(b => b.Branch.Name).ToList();
 
         var maxConcurrency = config.MaxConcurrency ?? int.MaxValue;
         using var semaphore = new SemaphoreSlim(maxConcurrency, maxConcurrency);
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
         var branchResults = new (bool Success, PipelineContext Context, string BranchName)[branches.Count];
-        var tasks = new Task[branches.Count];
 
-        for (var i = 0; i < branches.Count; i++)
+        await renderer.RunParallelWithLiveTable(branchLabels, header, async liveTable =>
         {
-            var index = i;
-            var (branch, branchSteps) = branches[i];
+            var tasks = new Task[branches.Count];
 
-            tasks[i] = Task.Run(async () =>
+            for (var i = 0; i < branches.Count; i++)
             {
-                await semaphore.WaitAsync(linkedCts.Token);
-                try
-                {
-                    // Suppress sub-step rendering; only branch-level messages show
-                    renderer.PushScope();
-                    renderer.SuppressRendering();
+                var index = i;
+                var (branch, branchSteps) = branches[i];
 
-                    // Create isolated context for this branch
-                    var branchContext = new PipelineContext
+                tasks[i] = Task.Run(async () =>
+                {
+                    await semaphore.WaitAsync(linkedCts.Token);
+                    try
                     {
-                        TaskDescription = branch.Name,
-                        WorkingDirectory = context.WorkingDirectory,
-                        StatusUpdate = msg => renderer.RenderThinking(branch.Name, msg)
-                    };
+                        // Suppress sub-step rendering inside parallel
+                        renderer.PushScope();
+                        renderer.SuppressRendering();
 
-                    // Copy parent step outputs for reads
-                    foreach (var (key, value) in context.StepOutputs)
-                        branchContext.StepOutputs[key] = value;
+                        liveTable.MarkStarted(index);
 
-                    // Resolve sub-step templates with current variables
-                    var branchVars = new Dictionary<string, string>(variables);
-                    foreach (var (key, value) in context.StepOutputs)
-                        branchVars[$"steps.{key}"] = value;
-
-                    var branchSw = Stopwatch.StartNew();
-
-                    var success = await executor.RunAsync(branchSteps, branchContext, linkedCts.Token,
-                        onBeforeStep: step =>
+                        // Create isolated context for this branch
+                        var branchContext = new PipelineContext
                         {
-                            if (step is DynamicStep dynamicStep)
+                            TaskDescription = branch.Name,
+                            WorkingDirectory = context.WorkingDirectory,
+                            StatusUpdate = msg => liveTable.UpdateActivity(index, msg)
+                        };
+
+                        // Copy parent step outputs for reads
+                        foreach (var (key, value) in context.StepOutputs)
+                            branchContext.StepOutputs[key] = value;
+
+                        // Resolve sub-step templates with current variables
+                        var branchVars = new Dictionary<string, string>(variables);
+                        foreach (var (key, value) in context.StepOutputs)
+                            branchVars[$"steps.{key}"] = value;
+
+                        var branchSw = Stopwatch.StartNew();
+
+                        var success = await executor.RunAsync(branchSteps, branchContext, linkedCts.Token,
+                            onBeforeStep: step =>
                             {
-                                var allVars = new Dictionary<string, string>(branchVars);
-                                foreach (var (key, value) in branchContext.StepOutputs)
-                                    allVars[$"steps.{key}"] = value;
+                                if (step is DynamicStep dynamicStep)
+                                {
+                                    var allVars = new Dictionary<string, string>(branchVars);
+                                    foreach (var (key, value) in branchContext.StepOutputs)
+                                        allVars[$"steps.{key}"] = value;
 
-                                dynamicStep.UpdateResolvedPrompt(
-                                    resolveTemplate(dynamicStep.OriginalPromptTemplate, allVars));
+                                    dynamicStep.UpdateResolvedPrompt(
+                                        resolveTemplate(dynamicStep.OriginalPromptTemplate, allVars));
 
-                                if (dynamicStep.OriginalSystemPromptTemplate is not null)
-                                    dynamicStep.UpdateResolvedSystemPrompt(
-                                        resolveTemplate(dynamicStep.OriginalSystemPromptTemplate, allVars));
-                            }
-                        });
+                                    if (dynamicStep.OriginalSystemPromptTemplate is not null)
+                                        dynamicStep.UpdateResolvedSystemPrompt(
+                                            resolveTemplate(dynamicStep.OriginalSystemPromptTemplate, allVars));
+                                }
+                            });
 
-                    branchSw.Stop();
-                    branchResults[index] = (success, branchContext, branch.Name);
+                        branchSw.Stop();
+                        branchResults[index] = (success, branchContext, branch.Name);
 
-                    if (!success && config.FailFast)
-                        await linkedCts.CancelAsync();
+                        if (!success && config.FailFast)
+                            await linkedCts.CancelAsync();
 
-                    // Resume rendering for our own branch completion message
-                    renderer.ResumeRendering();
-                    var branchTokens = branchContext.TotalInputTokens + branchContext.TotalOutputTokens;
-                    renderer.RenderParallelBranchComplete(branch.Name, success, branchSw.Elapsed, branchTokens, branchContext.TotalCostUsd);
-                }
-                finally
-                {
-                    renderer.ResumeRendering();
-                    renderer.PopScope();
-                    semaphore.Release();
-                }
-            }, linkedCts.Token);
-        }
+                        var branchTokens = branchContext.TotalInputTokens + branchContext.TotalOutputTokens;
+                        liveTable.MarkComplete(index, success, branchSw.Elapsed, branchTokens, branchContext.TotalCostUsd);
+                    }
+                    finally
+                    {
+                        renderer.ResumeRendering();
+                        renderer.PopScope();
+                        semaphore.Release();
+                    }
+                }, linkedCts.Token);
+            }
 
-        try
-        {
-            await Task.WhenAll(tasks);
-        }
-        catch (OperationCanceledException) when (config.FailFast)
-        {
-            // Expected when fail_fast cancels siblings
-        }
+            try
+            {
+                await Task.WhenAll(tasks);
+            }
+            catch (OperationCanceledException) when (config.FailFast)
+            {
+                // Expected when fail_fast cancels siblings
+            }
+        });
 
         sw.Stop();
 
@@ -162,6 +172,10 @@ public sealed class ParallelStep(
                 context.StepsFailed += branchCtx.StepsFailed;
             }
         }
+
+        var succeeded = branchResults.Count(r => r.Success);
+        var failed = branches.Count - succeeded;
+        renderer.RenderParallelSummary(branches.Count, succeeded, failed);
 
         return new StepResult
         {
